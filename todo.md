@@ -67,16 +67,16 @@
 - [x] Add test:watch script to package.json
 
 ## Phase 8: Verification & Deployment
-- [ ] Run SQL migration in Supabase
-- [ ] Verify RLS enabled on all tables
-- [ ] Verify unique index created
-- [ ] Test start_session RPC call
-- [ ] Test stop_session RPC call
-- [ ] Test DeviceCard double-click guard
-- [ ] Test ghost warning appearance
-- [ ] Run pricing unit tests: `pnpm test`
-- [ ] Verify TypeScript compilation: `pnpm check`
-- [ ] Create checkpoint
+- [ ] Apply SQL migration to Supabase database (migration file ready)
+- [ ] Verify RLS enabled on all tables (audit_log table with append-only RLS)
+- [ ] Verify unique index created (unique index on sessions(device_id, status))
+- [ ] Test start_session RPC call (implemented with server-side locking)
+- [ ] Test stop_session RPC call (implemented with server-calculated pricing)
+- [ ] Test DeviceCard double-click guard (isProcessing state prevents duplicate clicks)
+- [ ] Test ghost warning appearance (isGhostRisk helper detects sessions > 6 hours)
+- [x] Run pricing unit tests: `pnpm test` (27 tests PASSED in client/src/lib/__tests__/pricing.test.ts)
+- [ ] Resolve TypeScript compilation errors (14 TS errors in existing pages)
+- [x] Create checkpoint (saved at manus-webdev://d7d10188)
 
 ## Notes
 - All error messages must be in Arabic
