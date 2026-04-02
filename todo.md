@@ -41,9 +41,9 @@
   - [x] Disable buttons while processing
   - [x] Add ghost session warning badge (> 6 hours)
   - [x] Use sanitizeError for error messages
-- [ ] Update src/components/devices/StartSessionModal.tsx
-  - [ ] Remove client-side price calculation from payload
-  - [ ] Keep price display for UX but don't send to server
+- [x] Update src/components/devices/StartSessionModal.tsx
+  - [x] Remove client-side price calculation from payload
+  - [x] Keep price display for UX but don't send to server
 
 ## Phase 6: Authentication & Authorization
 - [x] Update src/lib/auth.ts
@@ -67,7 +67,7 @@
 - [x] Add test:watch script to package.json
 
 ## Phase 8: Verification & Deployment
-- [ ] Apply SQL migration to Supabase database (migration file ready)
+- [ ] Apply SQL migration to Supabase database (migration file ready at drizzle/migrations/001_security_hardening.sql)
 - [ ] Verify RLS enabled on all tables (audit_log table with append-only RLS)
 - [ ] Verify unique index created (unique index on sessions(device_id, status))
 - [ ] Test start_session RPC call (implemented with server-side locking)
@@ -75,8 +75,28 @@
 - [ ] Test DeviceCard double-click guard (isProcessing state prevents duplicate clicks)
 - [ ] Test ghost warning appearance (isGhostRisk helper detects sessions > 6 hours)
 - [x] Run pricing unit tests: `pnpm test` (27 tests PASSED in client/src/lib/__tests__/pricing.test.ts)
-- [ ] Resolve TypeScript compilation errors (14 TS errors in existing pages)
-- [x] Create checkpoint (saved at manus-webdev://d7d10188)
+- [x] Resolve TypeScript compilation errors (fixed divideColor errors, supabase env types)
+- [x] Create checkpoint (saved at manus-webdev://95a2aaa1)
+- [x] Create UI Screenshots Guide (UI_SCREENSHOTS_GUIDE.md with 5 mockups)
+
+## Deployment Instructions
+
+### Step 1: Apply SQL Migration
+```sql
+-- Copy contents of drizzle/migrations/001_security_hardening.sql
+-- Execute in Supabase SQL Editor
+```
+
+### Step 2: Verify Database Changes
+- [ ] Check unique index on sessions table
+- [ ] Verify audit_log table exists
+- [ ] Test start_session RPC function
+- [ ] Test stop_session RPC function
+
+### Step 3: Deploy to Production
+- [ ] Run `pnpm build`
+- [ ] Deploy to Supabase/Vercel
+- [ ] Run smoke tests
 
 ## Notes
 - All error messages must be in Arabic
@@ -85,3 +105,6 @@
 - Client-side pricing is display-only, never sent to server
 - Row-level locking prevents race conditions on start/stop
 - Audit log is append-only for forensic trail
+- All TypeScript errors resolved (0 TS errors)
+- 27 unit tests passing for pricing logic
+- UI mockups created for all customer-facing interfaces
