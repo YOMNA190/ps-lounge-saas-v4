@@ -160,7 +160,7 @@ export default function ExpensesPage() {
           <div className="flex justify-center py-10"><span className="spinner" style={{ width: 24, height: 24 }} /></div>
         ) : (
           <>
-            <div className="divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+            <div className="divide-y" style={{ borderColor: 'var(--ps-border)' }}>
               {displayExpenses.map((e, i) => {
                 const pct = Math.round((Number(e.amount) / TOTAL_FIXED_EXPENSES) * 100)
                 return (

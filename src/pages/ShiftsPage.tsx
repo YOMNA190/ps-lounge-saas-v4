@@ -286,7 +286,7 @@ export default function ShiftsPage() {
             <Users size={15} style={{ color: 'var(--ps-purple)' }} />
             <h2 className="font-semibold text-sm text-ps-text">الشيفتات النشطة ({allActive.length})</h2>
           </div>
-          <div className="divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+          <div className="divide-y" style={{ borderColor: 'var(--ps-border)' }}>
             {allActive.map(s => (
               <div key={s.id} className="flex items-center gap-4 px-5 py-4"
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--ps-surface)' }}
@@ -392,7 +392,7 @@ export default function ShiftsPage() {
                   <div className="px-4 py-2.5 text-xs font-semibold text-ps-muted uppercase tracking-wider"
                     style={{ background: 'var(--ps-surface)' }}
                   >ملخص الشيفت</div>
-                  <div className="px-4 py-2 divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+                  <div className="px-4 py-2 divide-y" style={{ borderColor: 'var(--ps-border)' }}>
                     <CashRow label={`جلسات الأجهزة (${preview.sessionsCount} جلسة)`} value={preview.sessionsRevenue} color="var(--ps-blue-light)" />
                     <CashRow label={`مبيعات البضاعة (${preview.salesCount} فاتورة)`}   value={preview.salesRevenue}    color="var(--ps-cyan)" />
                     <CashRow label="رصيد الفتح"  value={myShift.opening_cash} color="var(--ps-muted)" />

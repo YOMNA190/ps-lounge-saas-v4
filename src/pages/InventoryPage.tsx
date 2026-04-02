@@ -202,7 +202,7 @@ export default function InventoryPage() {
               </div>
             ) : (
               <>
-                <div className="divide-y overflow-y-auto" style={{ divideColor: 'var(--ps-border)', maxHeight: 320 }}>
+                <div className="divide-y overflow-y-auto" style={{ borderColor: 'var(--ps-border)', maxHeight: 320 }}>
                   {cart.map(item => (
                     <div key={item.product_id} className="flex items-center gap-3 px-4 py-3">
                       <div className="flex-1 min-w-0">
@@ -260,7 +260,7 @@ export default function InventoryPage() {
             <span className="text-center px-3">الكمية</span>
             {isAdmin && <span className="text-center px-3">إجراء</span>}
           </div>
-          <div className="divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+          <div className="divide-y" style={{ borderColor: 'var(--ps-border)' }}>
             {filtered.map(p => {
               const isLow = p.stock_qty <= p.min_stock_qty
               return (

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getTodaySessions, subscribeToSessions } from '@/lib/sessions'
 import { supabase } from '@/lib/supabase'
 import { ClipboardList, RefreshCw, Clock, Gamepad2, User } from 'lucide-react'
+import type { Session } from '@/types'
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -92,7 +93,7 @@ export default function SessionsPage() {
             </div>
 
             {/* Rows */}
-            <div className="divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+            <div className="divide-y" style={{ borderColor: 'var(--ps-border)' }}>
               {sessions.map((s, i) => {
                 const durationMin = s.ended_at && s.started_at
                   ? Math.round((new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000)

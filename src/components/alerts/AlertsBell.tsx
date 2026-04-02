@@ -70,7 +70,7 @@ export default function AlertsBell() {
                 لا توجد تنبيهات
               </div>
             ) : (
-              <div className="divide-y max-h-80 overflow-y-auto" style={{ divideColor: 'var(--ps-border)' }}>
+              <div className="divide-y max-h-80 overflow-y-auto" style={{ borderColor: 'var(--ps-border)' }}>
                 {alerts.map(a => {
                   const Icon = ICONS[a.type] || AlertTriangle
                   return (

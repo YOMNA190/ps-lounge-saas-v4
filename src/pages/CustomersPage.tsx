@@ -154,7 +154,7 @@ export default function CustomersPage() {
             ) : spending.length === 0 ? (
               <div className="py-12 text-center text-ps-muted text-sm">لا توجد جلسات هذا الشهر</div>
             ) : (
-              <div className="divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+              <div className="divide-y" style={{ borderColor: 'var(--ps-border)' }}>
                 {spending.map((c, i) => {
                   const pct = Math.min((c.total_spend / c.monthly_spend_limit) * 100, 100)
                   const isTop3 = i < 3
@@ -260,7 +260,7 @@ export default function CustomersPage() {
                   <span className="hidden sm:block mx-6">الموبايل</span>
                   <span>النقاط</span>
                 </div>
-                <div className="divide-y" style={{ divideColor: 'var(--ps-border)' }}>
+                <div className="divide-y" style={{ borderColor: 'var(--ps-border)' }}>
                   {filtered.map((c, i) => (
                     <div key={c.id} className="grid grid-cols-[1fr_auto_auto] px-4 py-3.5 items-center transition-colors"
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--ps-surface)' }}

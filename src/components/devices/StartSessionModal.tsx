@@ -45,14 +45,18 @@ export default function StartSessionModal({ device, onClose, onSuccess }: Props)
     }
 
     const finalGame = game === 'أخرى' ? customGame : game
-    const { error } = await startSession({
-      device_id: device.id, mode,
-      game_played: finalGame || undefined,
-      customer_id: customerId,
-    }, user.id)
-
-    if (error) toast.error('فشل بدء الجلسة')
-    else { toast.success(`✓ بدأت الجلسة على ${device.name}`); onSuccess() }
+    try {
+      await startSession(
+        device.id,
+        customerId,
+        mode,
+        device.price_single || device.price_multi
+      )
+      toast.success(`✓ بدأت الجلسة على ${device.name}`)
+      onSuccess()
+    } catch (err) {
+      toast.error('فشل بدء الجلسة')
+    }
     setLoading(false)
   }
 
