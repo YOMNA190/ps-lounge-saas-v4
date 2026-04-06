@@ -106,6 +106,7 @@ export async function endSession(sessionId: string) {
 // GET ACTIVE SESSIONS (for device grid)
 // ─────────────────────────────────────────────────────────────
 export async function getActiveSessions(): Promise<Session[]> {
+  const { data: profile } = await supabase.from('profiles').select('branch_id').single();
   const { data, error } = await supabase
     .from('sessions')
     .select(`
@@ -113,6 +114,7 @@ export async function getActiveSessions(): Promise<Session[]> {
       device:devices(*),
       customer:customers(*)
     `)
+    .eq('branch_id', profile?.branch_id)
     .is('ended_at', null)
     .order('started_at', { ascending: false })
 
@@ -124,6 +126,7 @@ export async function getActiveSessions(): Promise<Session[]> {
 // GET TODAY'S SESSIONS (admin)
 // ─────────────────────────────────────────────────────────────
 export async function getTodaySessions(): Promise<Session[]> {
+  const { data: profile } = await supabase.from('profiles').select('branch_id').single();
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -134,6 +137,7 @@ export async function getTodaySessions(): Promise<Session[]> {
       device:devices(*),
       customer:customers(*)
     `)
+    .eq('branch_id', profile?.branch_id)
     .gte('started_at', today.toISOString())
     .not('ended_at', 'is', null)
     .order('ended_at', { ascending: false })
