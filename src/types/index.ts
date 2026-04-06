@@ -281,3 +281,93 @@ export interface ShiftV4 extends Shift {
   cash_taken: number
   cash_left: number
 }
+
+// ─────────────────────────────────────────────────────────────
+// INTERNET CARDS
+// ─────────────────────────────────────────────────────────────
+export type CardStatus = 'available' | 'sold' | 'void'
+export type CardPaymentMethod = 'vodafone_cash' | 'instapay' | 'cash'
+
+export interface CardType {
+  id: number
+  name: string
+  provider: string       // 'WE' | 'فودافون' | 'اتصالات' | 'أورانج'
+  data_amount: string    // '10 جيجا' | '20 جيجا'
+  validity_days: number
+  cost_price: number
+  sell_price: number
+  low_stock_alert: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface CardInventorySummary extends CardType {
+  margin: number
+  available_count: number
+  sold_count: number
+  void_count: number
+  is_low_stock: boolean
+}
+
+export interface Card {
+  id: string
+  type_id: number
+  serial_code: string | null
+  status: CardStatus
+  sold_at: string | null
+  sold_to: string | null
+  sold_by: string | null
+  sale_price: number | null
+  payment_method: CardPaymentMethod | null
+  payment_ref: string | null
+  notes: string | null
+  created_at: string
+  card_type?: CardType
+  customer?: Customer
+}
+
+export interface CardSaleReport {
+  sale_date: string
+  provider: string
+  card_name: string
+  data_amount: string
+  qty_sold: number
+  total_revenue: number
+  total_cost: number
+  total_profit: number
+  payment_method: CardPaymentMethod
+}
+
+export const CARD_PROVIDERS = ['WE', 'فودافون', 'اتصالات', 'أورانج'] as const
+export const PAYMENT_METHODS: Record<CardPaymentMethod, string> = {
+  vodafone_cash: '📱 فودافون كاش',
+  instapay:      '💳 إنستاباي',
+  cash:          '💵 كاش',
+}
+
+// ─────────────────────────────────────────────────────────────
+// MULTI-TENANCY
+// ─────────────────────────────────────────────────────────────
+export type BranchPlan = 'trial' | 'basic' | 'pro'
+
+export interface Branch {
+  id: string
+  name: string
+  owner_id: string
+  address: string | null
+  phone: string | null
+  plan: BranchPlan
+  plan_expires_at: string | null
+  is_active: boolean
+  onboarding_done: boolean
+  currency: string
+  timezone: string
+  loyalty_limit: number
+  created_at: string
+}
+
+// Update Profile to include branch_id
+// (extend existing interface)
+export interface ProfileWithBranch extends Profile {
+  branch_id: string | null
+}

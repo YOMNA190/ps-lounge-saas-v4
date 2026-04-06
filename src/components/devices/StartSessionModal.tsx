@@ -46,11 +46,16 @@ export default function StartSessionModal({ device, onClose, onSuccess }: Props)
 
     const finalGame = game === 'أخرى' ? customGame : game
     try {
+      const hourlyRate = mode === 'single'
+        ? (device.price_single || 0)
+        : (device.price_multi  || 0)
+
       await startSession(
         device.id,
         customerId,
         mode,
-        device.price_single || device.price_multi
+        hourlyRate,
+        finalGame || undefined
       )
       toast.success(`✓ بدأت الجلسة على ${device.name}`)
       onSuccess()

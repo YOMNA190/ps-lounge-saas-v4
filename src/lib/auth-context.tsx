@@ -3,61 +3,27 @@ import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { Profile } from '@/types'
 
-// ─────────────────────────────────────────────────────────────
-// ROLE-BASED ACCESS CONTROL HELPERS
-// Use these instead of loose string comparisons like role === 'admin'
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Type guard: Check if user has admin role
- */
-export function requireAdmin(role: string | undefined | null): boolean {
-  return role === 'admin'
-}
-
-/**
- * Type guard: Check if user has staff or admin role
- */
-export function requireStaff(role: string | undefined | null): boolean {
-  return role === 'admin' || role === 'staff'
-}
-
-/**
- * Type guard: Check if user can access financial data
- * Only admins can view financial reports and audit logs
- */
-export function canAccessFinancialData(role: string | undefined | null): boolean {
-  return requireAdmin(role)
-}
-
-/**
- * Type guard: Check if user can start/stop sessions
- * Staff and admins can manage sessions
- */
-export function canManageSessions(role: string | undefined | null): boolean {
-  return requireStaff(role)
-}
-
-/**
- * Type guard: Check if user can view audit logs
- * Only admins can access audit trails for fraud detection
- */
-export function canViewAuditLogs(role: string | undefined | null): boolean {
-  return requireAdmin(role)
-}
+export function requireAdmin(role: string | undefined | null)          { return role === 'admin' }
+export function requireStaff(role: string | undefined | null)          { return role === 'admin' || role === 'staff' }
+export function canAccessFinancialData(role: string | undefined | null){ return requireAdmin(role) }
+export function canManageSessions(role: string | undefined | null)     { return requireStaff(role) }
+export function canViewAuditLogs(role: string | undefined | null)      { return requireAdmin(role) }
 
 interface AuthContextValue {
-  user: User | null
-  profile: Profile | null
-  session: Session | null
-  loading: boolean
-  isAdmin: boolean
-  isStaff: boolean
+  user:               User | null
+  profile:            Profile | null
+  session:            Session | null
+  loading:            boolean
+  isAdmin:            boolean
+  isStaff:            boolean
   canAccessFinancial: boolean
-  canManageSession: boolean
-  canViewAudit: boolean
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>
-  signOut: () => Promise<void>
+  canManageSession:   boolean
+  canViewAudit:       boolean
+  signIn:         (email: string, password: string)  => Promise<{ error: Error | null }>
+  signUp:         (email: string, password: string, name: string) => Promise<{ error: Error | null }>
+  signOut:        ()                                 => Promise<void>
+  resetPassword:  (email: string)                    => Promise<{ error: Error | null }>
+  updatePassword: (newPassword: string)              => Promise<{ error: Error | null }>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -69,11 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     setProfile(data)
   }
 
@@ -84,20 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) fetchProfile(session.user.id)
       setLoading(false)
     })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session)
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
-        }
-        setLoading(false)
-      }
-    )
-
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session)
+      setUser(session?.user ?? null)
+      if (session?.user) await fetchProfile(session.user.id)
+      else setProfile(null)
+      setLoading(false)
+    })
     return () => subscription.unsubscribe()
   }, [])
 
@@ -106,25 +61,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error }
   }
 
-  const signOut = async () => {
-    await supabase.auth.signOut()
+  const signUp = async (email: string, password: string, name: string) => {
+    const { error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { name } },
+    })
+    return { error }
+  }
+
+  const signOut = async () => { await supabase.auth.signOut() }
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    return { error }
+  }
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    return { error }
   }
 
   const role = profile?.role
-
   return (
     <AuthContext.Provider value={{
-      user,
-      profile,
-      session,
-      loading,
-      isAdmin: requireAdmin(role),
-      isStaff: requireStaff(role),
+      user, profile, session, loading,
+      isAdmin:            requireAdmin(role),
+      isStaff:            requireStaff(role),
       canAccessFinancial: canAccessFinancialData(role),
-      canManageSession: canManageSessions(role),
-      canViewAudit: canViewAuditLogs(role),
-      signIn,
-      signOut,
+      canManageSession:   canManageSessions(role),
+      canViewAudit:       canViewAuditLogs(role),
+      signIn, signUp, signOut, resetPassword, updatePassword,
     }}>
       {children}
     </AuthContext.Provider>
@@ -133,6 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider')
+  if (!ctx) throw new Error('useAuth must be inside AuthProvider')
   return ctx
 }

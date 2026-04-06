@@ -1,398 +1,234 @@
 -- ============================================================
 -- Migration 001: Security Hardening & Financial Integrity
--- PS Lounge SaaS v4 — Charging Session Management
+-- PS Lounge SaaS v4 — PostgreSQL / Supabase Compatible
 -- ============================================================
--- This migration adds:
--- 1. Unique index to prevent duplicate active sessions per device
--- 2. CHECK constraints for financial data integrity
--- 3. Performance indexes for high-frequency queries
--- 4. Audit log table with append-only RLS
--- 5. Ghost session reaper function
--- 6. Server-side start_session and stop_session functions
+-- IMPORTANT: Run AFTER supabase/migrations/001, 002, 003
 -- ============================================================
 
--- ────────────────────────────────────────────────────────────
--- 1. IDEMPOTENCY: Prevent duplicate active sessions per device
--- Problem: Double-click or race condition creates two active
--- sessions on the same device → financial corruption
--- ────────────────────────────────────────────────────────────
-
--- Create sessions table if it doesn't exist
-CREATE TABLE IF NOT EXISTS sessions (
-  id CHAR(36) PRIMARY KEY,
-  device_id INT NOT NULL,
-  customer_id VARCHAR(255),
-  mode VARCHAR(50) NOT NULL DEFAULT 'single',
-  hourly_rate DECIMAL(10,2),
-  start_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  end_time TIMESTAMP,
-  duration_mins INT,
-  price_paid DECIMAL(10,2),
-  status VARCHAR(50) NOT NULL DEFAULT 'active',
-  notes TEXT,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_device_id (device_id),
-  INDEX idx_customer_id (customer_id),
-  INDEX idx_status (status),
-  INDEX idx_start_time (start_time DESC)
-);
-
--- Unique index: only one active session per device
+-- ─────────────────────────────────────────────────────────────
+-- 1. PREVENT DUPLICATE ACTIVE SESSIONS PER DEVICE
+-- ─────────────────────────────────────────────────────────────
 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_active_session_per_device
-ON sessions (device_id)
-WHERE status = 'active';
+  ON sessions (device_id)
+  WHERE ended_at IS NULL;
 
--- ────────────────────────────────────────────────────────────
--- 2. DATA INTEGRITY: Prevent impossible financial values
--- Problem: No DB-level guards → negative prices, impossible
--- durations, negative loyalty points possible
--- ────────────────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────
+-- 2. DATA INTEGRITY CONSTRAINTS
+-- ─────────────────────────────────────────────────────────────
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_end_after_start'
+  ) THEN
+    ALTER TABLE sessions ADD CONSTRAINT chk_end_after_start
+      CHECK (ended_at IS NULL OR ended_at >= started_at);
+  END IF;
 
--- Ensure end_time >= start_time
-ALTER TABLE sessions ADD CONSTRAINT IF NOT EXISTS chk_end_after_start
-  CHECK (end_time IS NULL OR end_time >= start_time);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_positive_cost'
+  ) THEN
+    ALTER TABLE sessions ADD CONSTRAINT chk_positive_cost
+      CHECK (cost IS NULL OR cost >= 0);
+  END IF;
 
--- Ensure duration is non-negative
-ALTER TABLE sessions ADD CONSTRAINT IF NOT EXISTS chk_positive_duration
-  CHECK (duration_mins IS NULL OR duration_mins >= 0);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_non_negative_points'
+  ) THEN
+    ALTER TABLE customers ADD CONSTRAINT chk_non_negative_points
+      CHECK (points >= 0);
+  END IF;
 
--- Ensure price is non-negative
-ALTER TABLE sessions ADD CONSTRAINT IF NOT EXISTS chk_positive_price
-  CHECK (price_paid IS NULL OR price_paid >= 0);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_positive_sell_price'
+  ) THEN
+    ALTER TABLE products ADD CONSTRAINT chk_positive_sell_price
+      CHECK (sell_price >= 0);
+  END IF;
 
--- Create customers table if it doesn't exist
-CREATE TABLE IF NOT EXISTS customers (
-  id CHAR(36) PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  phone VARCHAR(20),
-  loyalty_points INT NOT NULL DEFAULT 0,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'chk_positive_stock'
+  ) THEN
+    ALTER TABLE products ADD CONSTRAINT chk_positive_stock
+      CHECK (stock_qty >= 0);
+  END IF;
+END $$;
 
--- Loyalty points cannot go negative
-ALTER TABLE customers ADD CONSTRAINT IF NOT EXISTS chk_non_negative_points
-  CHECK (loyalty_points >= 0);
+-- ─────────────────────────────────────────────────────────────
+-- 3. PERFORMANCE INDEXES
+-- ─────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_sessions_device_active
+  ON sessions (device_id) WHERE ended_at IS NULL;
 
--- Create devices table if it doesn't exist
-CREATE TABLE IF NOT EXISTS devices (
-  id INT PRIMARY KEY AUTO_INCREMENT,
-  name VARCHAR(255) NOT NULL,
-  status VARCHAR(50) NOT NULL DEFAULT 'available',
-  hourly_rate DECIMAL(10,2),
-  branch_id VARCHAR(255),
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_branch_id (branch_id),
-  INDEX idx_status (status)
-);
+CREATE INDEX IF NOT EXISTS idx_sessions_started_at
+  ON sessions (started_at DESC);
 
--- ────────────────────────────────────────────────────────────
--- 3. PERFORMANCE: Critical indexes for high-frequency queries
--- Problem: Analytics and session queries do full table scans
--- ────────────────────────────────────────────────────────────
-
-CREATE INDEX IF NOT EXISTS idx_sessions_device_status
-ON sessions (device_id, status);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_start_time
-ON sessions (start_time DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_staff
+  ON sessions (staff_id);
 
 CREATE INDEX IF NOT EXISTS idx_sessions_customer
-ON sessions (customer_id)
-WHERE customer_id IS NOT NULL;
+  ON sessions (customer_id) WHERE customer_id IS NOT NULL;
 
--- ────────────────────────────────────────────────────────────
--- 4. AUDIT LOG: Full forensic trail for all financial mutations
--- Problem: Zero visibility into who changed what and when
--- Fraud is completely undetectable
--- ────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_sales_staff    ON sales (staff_id);
+CREATE INDEX IF NOT EXISTS idx_sales_created  ON sales (created_at DESC);
 
+-- ─────────────────────────────────────────────────────────────
+-- 4. AUDIT LOG TABLE (append-only)
+-- ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS audit_log (
-  id CHAR(36) PRIMARY KEY,
-  user_id VARCHAR(255),
-  action VARCHAR(50) NOT NULL,
-  table_name VARCHAR(255) NOT NULL,
-  record_id CHAR(36) NOT NULL,
-  old_value JSON,
-  new_value JSON,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_audit_created (created_at DESC),
-  INDEX idx_audit_record (record_id, table_name),
-  CONSTRAINT chk_action CHECK (action IN ('INSERT', 'UPDATE', 'DELETE'))
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID REFERENCES auth.users(id),
+  action     TEXT NOT NULL CHECK (action IN (
+    'START_SESSION','STOP_SESSION','RESTOCK','SALE','END_SHIFT'
+  )),
+  table_name TEXT NOT NULL,
+  record_id  TEXT NOT NULL,
+  old_value  JSONB,
+  new_value  JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ────────────────────────────────────────────────────────────
--- 5. AUDIT TRIGGER: Auto-log all session mutations
--- ────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_record  ON audit_log (record_id, table_name);
 
-DELIMITER $$
+ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;
 
-CREATE TRIGGER IF NOT EXISTS trg_sessions_audit_insert
-AFTER INSERT ON sessions
-FOR EACH ROW
+DROP POLICY IF EXISTS "admin_read_audit"  ON audit_log;
+DROP POLICY IF EXISTS "no_delete_audit"   ON audit_log;
+DROP POLICY IF EXISTS "no_update_audit"   ON audit_log;
+
+CREATE POLICY "admin_read_audit" ON audit_log FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+
+CREATE POLICY "no_delete_audit" ON audit_log FOR DELETE TO authenticated
+  USING (FALSE);
+
+CREATE POLICY "no_update_audit" ON audit_log FOR UPDATE TO authenticated
+  USING (FALSE);
+
+-- ─────────────────────────────────────────────────────────────
+-- 5. AUDIT TRIGGER ON SESSIONS
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION log_session_change()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
-  INSERT INTO audit_log (
-    id,
-    user_id,
-    action,
-    table_name,
-    record_id,
-    old_value,
-    new_value,
-    created_at
-  ) VALUES (
-    UUID(),
-    NULL,
-    'INSERT',
-    'sessions',
-    NEW.id,
-    NULL,
-    JSON_OBJECT(
-      'id', NEW.id,
-      'device_id', NEW.device_id,
-      'customer_id', NEW.customer_id,
-      'mode', NEW.mode,
-      'hourly_rate', NEW.hourly_rate,
-      'start_time', NEW.start_time,
-      'end_time', NEW.end_time,
-      'duration_mins', NEW.duration_mins,
-      'price_paid', NEW.price_paid,
-      'status', NEW.status,
-      'notes', NEW.notes
-    ),
-    CURRENT_TIMESTAMP
-  );
-END$$
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO audit_log (user_id, action, table_name, record_id, new_value)
+    VALUES (auth.uid(), 'START_SESSION', 'sessions', NEW.id::TEXT, to_jsonb(NEW));
+  ELSIF TG_OP = 'UPDATE' AND OLD.ended_at IS NULL AND NEW.ended_at IS NOT NULL THEN
+    INSERT INTO audit_log (user_id, action, table_name, record_id, old_value, new_value)
+    VALUES (auth.uid(), 'STOP_SESSION', 'sessions', NEW.id::TEXT, to_jsonb(OLD), to_jsonb(NEW));
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
-CREATE TRIGGER IF NOT EXISTS trg_sessions_audit_update
-AFTER UPDATE ON sessions
-FOR EACH ROW
+DROP TRIGGER IF EXISTS trg_sessions_audit ON sessions;
+CREATE TRIGGER trg_sessions_audit
+  AFTER INSERT OR UPDATE ON sessions
+  FOR EACH ROW EXECUTE FUNCTION log_session_change();
+
+-- ─────────────────────────────────────────────────────────────
+-- 6. GHOST SESSION REAPER
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION reap_ghost_sessions()
+RETURNS INTEGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  reaped INTEGER;
 BEGIN
-  INSERT INTO audit_log (
-    id,
-    user_id,
-    action,
-    table_name,
-    record_id,
-    old_value,
-    new_value,
-    created_at
-  ) VALUES (
-    UUID(),
-    NULL,
-    'UPDATE',
-    'sessions',
-    NEW.id,
-    JSON_OBJECT(
-      'id', OLD.id,
-      'device_id', OLD.device_id,
-      'customer_id', OLD.customer_id,
-      'mode', OLD.mode,
-      'hourly_rate', OLD.hourly_rate,
-      'start_time', OLD.start_time,
-      'end_time', OLD.end_time,
-      'duration_mins', OLD.duration_mins,
-      'price_paid', OLD.price_paid,
-      'status', OLD.status,
-      'notes', OLD.notes
-    ),
-    JSON_OBJECT(
-      'id', NEW.id,
-      'device_id', NEW.device_id,
-      'customer_id', NEW.customer_id,
-      'mode', NEW.mode,
-      'hourly_rate', NEW.hourly_rate,
-      'start_time', NEW.start_time,
-      'end_time', NEW.end_time,
-      'duration_mins', NEW.duration_mins,
-      'price_paid', NEW.price_paid,
-      'status', NEW.status,
-      'notes', NEW.notes
-    ),
-    CURRENT_TIMESTAMP
-  );
-END$$
+  WITH ghost AS (
+    UPDATE sessions SET
+      ended_at = started_at + INTERVAL '12 hours',
+      cost     = ROUND(
+        12.0 * COALESCE(
+          (SELECT CASE WHEN mode = 'single' THEN price_single ELSE price_multi END
+           FROM devices WHERE id = device_id), 0
+        ), 2
+      ),
+      notes = COALESCE(notes || ' | ', '') ||
+              '[AUTO-CLOSED ghost session at ' || NOW()::TEXT || ']'
+    WHERE ended_at IS NULL
+      AND started_at < NOW() - INTERVAL '12 hours'
+    RETURNING id
+  )
+  SELECT COUNT(*) INTO reaped FROM ghost;
+  RETURN reaped;
+END;
+$$;
 
-CREATE TRIGGER IF NOT EXISTS trg_sessions_audit_delete
-AFTER DELETE ON sessions
-FOR EACH ROW
+-- ─────────────────────────────────────────────────────────────
+-- 7. SERVER-SIDE start_session WITH ROW LOCKING + game_played
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION start_session(
+  p_device_id   INTEGER,
+  p_customer_id UUID    DEFAULT NULL,
+  p_mode        TEXT    DEFAULT 'single',
+  p_hourly_rate NUMERIC DEFAULT NULL,
+  p_game_played TEXT    DEFAULT NULL
+) RETURNS sessions LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  sess sessions;
 BEGIN
-  INSERT INTO audit_log (
-    id,
-    user_id,
-    action,
-    table_name,
-    record_id,
-    old_value,
-    new_value,
-    created_at
-  ) VALUES (
-    UUID(),
-    NULL,
-    'DELETE',
-    'sessions',
-    OLD.id,
-    JSON_OBJECT(
-      'id', OLD.id,
-      'device_id', OLD.device_id,
-      'customer_id', OLD.customer_id,
-      'mode', OLD.mode,
-      'hourly_rate', OLD.hourly_rate,
-      'start_time', OLD.start_time,
-      'end_time', OLD.end_time,
-      'duration_mins', OLD.duration_mins,
-      'price_paid', OLD.price_paid,
-      'status', OLD.status,
-      'notes', OLD.notes
-    ),
-    NULL,
-    CURRENT_TIMESTAMP
-  );
-END$$
+  -- Lock device row to prevent concurrent starts
+  PERFORM id FROM devices WHERE id = p_device_id FOR UPDATE;
 
--- ────────────────────────────────────────────────────────────
--- 6. GHOST SESSION REAPER: Auto-close abandoned sessions
--- Problem: Browser crash / network drop leaves session = 'active'
--- forever → device locked, revenue lost
--- ────────────────────────────────────────────────────────────
-
-CREATE PROCEDURE IF NOT EXISTS reap_ghost_sessions()
-BEGIN
-  UPDATE sessions
-  SET
-    status = 'ghost',
-    end_time = DATE_ADD(start_time, INTERVAL 12 HOUR),
-    duration_mins = 720,
-    notes = CONCAT(COALESCE(CONCAT(notes, ' | '), ''), CONCAT('[AUTO-CLOSED: ghost session ', NOW(), ']'))
-  WHERE
-    status = 'active'
-    AND start_time < DATE_SUB(NOW(), INTERVAL 12 HOUR);
-
-  UPDATE devices
-  SET status = 'available'
-  WHERE status = 'busy'
-    AND id NOT IN (
-      SELECT DISTINCT device_id
-      FROM sessions
-      WHERE status = 'active'
-    );
-END$$
-
--- ────────────────────────────────────────────────────────────
--- 7. STOP SESSION: Server-side only — client sends NOTHING
--- except the session ID. Server calculates everything.
--- Problem: Client-side stop_session allows manipulation of
--- end_time, duration, price → financial fraud vector
--- ────────────────────────────────────────────────────────────
-
-CREATE PROCEDURE IF NOT EXISTS stop_session(IN p_session_id CHAR(36))
-BEGIN
-  DECLARE v_device_id INT;
-  DECLARE v_start_time TIMESTAMP;
-  DECLARE v_hourly_rate DECIMAL(10,2);
-  DECLARE v_minutes INT;
-  DECLARE v_price_paid DECIMAL(10,2);
-  DECLARE session_not_found CONDITION FOR SQLSTATE '45000';
-
-  -- Lock the row to prevent concurrent stop attempts
-  SELECT device_id, start_time, hourly_rate
-  INTO v_device_id, v_start_time, v_hourly_rate
-  FROM sessions
-  WHERE id = p_session_id AND status = 'active'
-  LIMIT 1 FOR UPDATE;
-
-  IF v_device_id IS NULL THEN
-    SIGNAL session_not_found SET MESSAGE_TEXT = 'SESSION_NOT_FOUND: Session is not active or does not exist';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'DEVICE_UNAVAILABLE: Device % not found', p_device_id;
   END IF;
 
-  -- Server calculates duration — never trust the client
-  -- Minimum 1 minute charge
-  SET v_minutes = GREATEST(
-    CEILING(EXTRACT(EPOCH FROM (NOW() - v_start_time)) / 60),
-    1
+  -- Check no active session exists
+  IF EXISTS (SELECT 1 FROM sessions WHERE device_id = p_device_id AND ended_at IS NULL) THEN
+    RAISE EXCEPTION 'DUPLICATE_SESSION: Device % already has an active session', p_device_id;
+  END IF;
+
+  INSERT INTO sessions (device_id, customer_id, mode, game_played, started_at, staff_id)
+  VALUES (p_device_id, p_customer_id, p_mode, p_game_played, NOW(), auth.uid())
+  RETURNING * INTO sess;
+
+  RETURN sess;
+END;
+$$;
+
+-- ─────────────────────────────────────────────────────────────
+-- 8. SERVER-SIDE stop_session
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION stop_session(p_session_id UUID)
+RETURNS sessions LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  sess  sessions;
+  dev   devices;
+  dur_h NUMERIC;
+  rate  NUMERIC;
+BEGIN
+  SELECT * INTO sess FROM sessions
+    WHERE id = p_session_id AND ended_at IS NULL
+    FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SESSION_NOT_FOUND: Session % not active', p_session_id;
+  END IF;
+
+  SELECT * INTO dev FROM devices WHERE id = sess.device_id;
+
+  -- Server-side duration — never trust client
+  dur_h := GREATEST(
+    EXTRACT(EPOCH FROM (NOW() - sess.started_at)) / 3600.0,
+    1.0/60.0  -- minimum 1 minute
   );
 
-  -- Calculate price using the rate locked at session start
-  -- hourly_rate is stored in EGP; result in EGP with 2 decimal precision
-  SET v_price_paid = ROUND(
-    (v_minutes / 60.0) * COALESCE(v_hourly_rate, 0),
-    2
-  );
+  rate := CASE WHEN sess.mode = 'single' THEN dev.price_single ELSE dev.price_multi END;
 
-  -- Update session
   UPDATE sessions SET
-    end_time = NOW(),
-    duration_mins = v_minutes,
-    price_paid = v_price_paid,
-    status = 'completed'
-  WHERE id = p_session_id;
+    ended_at = NOW(),
+    cost     = ROUND(dur_h * COALESCE(rate, 0), 2)
+  WHERE id = p_session_id
+  RETURNING * INTO sess;
 
-  -- Release the device
-  UPDATE devices
-  SET status = 'available'
-  WHERE id = v_device_id;
-
-  -- Return the updated session
-  SELECT * FROM sessions WHERE id = p_session_id;
-END$$
-
--- ────────────────────────────────────────────────────────────
--- 8. START SESSION: Server-side with row locking
--- Problem: Two staff can start session on same device
--- simultaneously → two active sessions, billing chaos
--- ────────────────────────────────────────────────────────────
-
-CREATE PROCEDURE IF NOT EXISTS start_session(
-  IN p_device_id INT,
-  IN p_customer_id VARCHAR(255),
-  IN p_mode VARCHAR(50),
-  IN p_hourly_rate DECIMAL(10,2)
-)
-BEGIN
-  DECLARE v_device_status VARCHAR(50);
-  DECLARE device_unavailable CONDITION FOR SQLSTATE '45000';
-
-  -- Lock device row — prevents concurrent start on same device
-  SELECT status
-  INTO v_device_status
-  FROM devices
-  WHERE id = p_device_id
-  LIMIT 1 FOR UPDATE;
-
-  IF v_device_status IS NULL OR v_device_status != 'available' THEN
-    SIGNAL device_unavailable SET MESSAGE_TEXT = 'DEVICE_UNAVAILABLE: Device is not available';
+  -- Award loyalty points
+  IF sess.customer_id IS NOT NULL THEN
+    UPDATE customers SET points = points + FLOOR(sess.cost)
+    WHERE id = sess.customer_id;
   END IF;
 
-  -- Mark device as busy
-  UPDATE devices SET status = 'busy' WHERE id = p_device_id;
-
-  -- Create session with server timestamp
-  INSERT INTO sessions (
-    id,
-    device_id,
-    customer_id,
-    mode,
-    hourly_rate,
-    start_time,
-    status
-  ) VALUES (
-    UUID(),
-    p_device_id,
-    p_customer_id,
-    p_mode,
-    COALESCE(p_hourly_rate, 0),
-    NOW(),
-    'active'
-  );
-
-  -- Return the created session
-  SELECT * FROM sessions WHERE id = LAST_INSERT_ID() LIMIT 1;
-END$$
-
-DELIMITER ;
-
--- ────────────────────────────────────────────────────────────
--- DONE: Migration 001 applied successfully
--- ────────────────────────────────────────────────────────────
+  RETURN sess;
+END;
+$$;

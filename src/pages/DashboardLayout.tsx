@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth-context'
 import {
   LayoutGrid, BarChart3, Users, Receipt,
   ClipboardList, LogOut, Menu, X, ShieldCheck,
-  Package, Clock, Tag
+  Package, Clock, Tag, Wifi, Settings2
 } from 'lucide-react'
 import AlertsBell from '@/components/alerts/AlertsBell'
 import clsx from 'clsx'
@@ -15,9 +15,11 @@ const navItems = [
   { to: '/inventory',  label: 'البضاعة',     icon: Package                 },
   { to: '/shifts',     label: 'الشيفتات',    icon: Clock                   },
   { to: '/packages',   label: 'الباقات',     icon: Tag                     },
+  { to: '/cards',      label: 'كروت النت',   icon: Wifi                    },
   { to: '/customers',  label: 'العملاء',     icon: Users                   },
   { to: '/analytics',  label: 'التحليلات',   icon: BarChart3,  adminOnly: true },
   { to: '/expenses',   label: 'المصاريف',    icon: Receipt,   adminOnly: true },
+  { to: '/settings',  label: 'الإعدادات',   icon: Settings2, adminOnly: true },
 ]
 
 export default function DashboardLayout() {

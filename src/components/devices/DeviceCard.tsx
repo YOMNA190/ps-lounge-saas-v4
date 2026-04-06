@@ -67,8 +67,10 @@ export default function DeviceCard({ device, onUpdate }: Props) {
 
     setIsProcessing(true)
     try {
-      await stopSession(session.id)
-      toast.success(`تمت الجلسة — ${estimatedPrice} جنيه`)
+      const result = await stopSession(session.id)
+      // Show server-calculated cost (authoritative), fall back to client estimate
+      const actualCost = result?.cost ?? estimatedPrice
+      toast.success(`تمت الجلسة — ${actualCost} جنيه`)
       onUpdate()
     } catch (error) {
       const appError = sanitizeError(error)

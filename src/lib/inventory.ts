@@ -15,21 +15,12 @@ export async function getProducts(categoryId?: number) {
 }
 
 export async function getLowStockProducts(): Promise<Product[]> {
-  const { data, error } = await supabase
+  // Simple client-side filter — Supabase doesn't support column-vs-column comparisons
+  const { data } = await supabase
     .from('products')
     .select('*, category:inventory_categories(*)')
-    .filter('stock_qty', 'lte', supabase.rpc as unknown as number)
-  // Use raw filter
-  const { data: d2, error: e2 } = await supabase
-    .from('products')
-    .select('*, category:inventory_categories(*)')
-    .lte('stock_qty' as never, 'min_stock_qty' as never)
-  if (e2) {
-    // fallback: get all and filter client-side
-    const { data: all } = await supabase.from('products').select('*, category:inventory_categories(*)')
-    return (all || []).filter((p: Product) => p.stock_qty <= p.min_stock_qty)
-  }
-  return d2 || []
+    .eq('is_active', true)
+  return ((data || []) as Product[]).filter(p => p.stock_qty <= p.min_stock_qty)
 }
 
 export async function getAllLowStock(): Promise<Product[]> {

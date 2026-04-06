@@ -7,7 +7,7 @@ import {
 import {
   Clock, LogIn, LogOut, Wallet, AlertTriangle, Users,
   CheckCircle, Lock, Eye, EyeOff, Gamepad2, Package,
-  TrendingUp, ShieldCheck, X, Edit
+  TrendingUp, ShieldCheck, X
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { format, formatDistanceToNow } from 'date-fns'

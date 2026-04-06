@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Customer, CustomerMonthlySpending } from '@/types'
-import { Users, Search, Plus, Phone, Star, Trophy, X, Gift, Clock, TrendingUp, AlertCircle } from 'lucide-react'
+import { Users, Search, Plus, Phone, Star, Trophy, X, Gift, Clock, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { getCustomerMonthlySpending, claimCustomerReward } from '@/lib/shifts'
 import { useAuth } from '@/lib/auth-context'
@@ -71,7 +71,6 @@ export default function CustomersPage() {
   }
 
   const eligibleForReward = spending.filter(s => s.limit_exceeded && !s.reward_claimed_this_month)
-  const topThree = spending.slice(0, 3)
 
   return (
     <div className="space-y-5 animate-fade-in">

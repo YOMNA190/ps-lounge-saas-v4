@@ -34,14 +34,16 @@ export async function startSession(
   deviceId: number,
   customerId?: string,
   mode: string = 'single',
-  hourlyRate?: number
+  hourlyRate?: number,
+  gamePlayed?: string
 ): Promise<Session> {
   try {
     const { data, error } = await supabase.rpc('start_session', {
-      p_device_id: deviceId,
-      p_customer_id: customerId ?? null,
-      p_mode: mode,
-      p_hourly_rate: hourlyRate ?? null,
+      p_device_id:   deviceId,
+      p_customer_id: customerId    ?? null,
+      p_mode:        mode,
+      p_hourly_rate: hourlyRate    ?? null,
+      p_game_played: gamePlayed    ?? null,
     })
 
     if (error) {
