@@ -22,18 +22,27 @@ function ProtectedRoute({ children, adminOnly = false }: { children: React.React
   const { user, profile, loading } = useAuth()
   const { loading: branchLoading } = useBranch()
 
-  if (loading || branchLoading) return (
+  // If auth is still loading, show spinner
+  if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background:'var(--ps-darker)' }}>
       <span className="spinner" style={{ width:36, height:36 }}/>
     </div>
   )
 
+  // If not logged in, go to login
   if (!user) return <Navigate to="/login" replace/>
 
-  // New user with no branch → onboarding
-  if (!(profile as { branch_id?: string | null })?.branch_id) {
+  // If logged in but no branch, show onboarding (don't wait for branchLoading)
+  if (!profile?.branch_id) {
     return <OnboardingPage onDone={() => window.location.reload()}/>
   }
+
+  // If branch is still loading, show spinner
+  if (branchLoading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background:'var(--ps-darker)' }}>
+      <span className="spinner" style={{ width:36, height:36 }}/>
+    </div>
+  )
 
   if (adminOnly && profile?.role !== 'admin') return <Navigate to="/" replace/>
 
