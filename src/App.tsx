@@ -18,13 +18,16 @@ import PackagesPage      from './pages/PackagesPage'
 import CardsPage         from './pages/CardsPage'
 import SettingsPage      from './pages/SettingsPage'
 
-function LoadingScreen() {
+function Spinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ps-darker)' }}>
-      <div className="flex flex-col items-center gap-4">
-        <span className="spinner" style={{ width: 36, height: 36 }}/>
-        <p className="text-ps-muted text-sm font-mono">PS LOUNGE</p>
-      </div>
+    <div style={{
+      minHeight: '100dvh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', background: 'var(--ps-darker)',
+    }}>
+      <span className="spinner" style={{ width: 36, height: 36 }}/>
+      <p style={{ color: 'var(--ps-muted)', fontSize: 12, fontFamily: 'monospace', marginTop: 16 }}>
+        PS LOUNGE
+      </p>
     </div>
   )
 }
@@ -33,42 +36,47 @@ function ProtectedRoute({ children, adminOnly = false }: {
   children: React.ReactNode
   adminOnly?: boolean
 }) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
   const { loading: branchLoading } = useBranch()
 
-  // Wait for both auth + branch to resolve
-  if (loading || branchLoading) return <LoadingScreen/>
+  // Auth still loading
+  if (authLoading) return <Spinner/>
 
-  // Not logged in
+  // Not logged in → go to login
   if (!user) return <Navigate to="/login" replace/>
 
-  // Logged in but profile not yet loaded (rare — trigger race)
-  if (!profile) return <LoadingScreen/>
+  // Profile still loading (rare — trigger race condition)
+  if (!profile) return <Spinner/>
 
-  // No branch yet → show onboarding
+  // Branch data still loading (only fires if profile has branch_id)
+  if (branchLoading) return <Spinner/>
+
+  // New user — needs onboarding
   if (!profile.branch_id) {
     return <OnboardingPage onDone={() => window.location.reload()}/>
   }
 
-  // Role check
-  if (adminOnly && profile.role !== 'admin') return <Navigate to="/" replace/>
+  // Admin-only page
+  if (adminOnly && profile.role !== 'admin') {
+    return <Navigate to="/" replace/>
+  }
 
-  // Check trial expiry
   return <TrialGuard>{children}</TrialGuard>
 }
 
 export default function App() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+
+  // Show spinner while auth initializes (prevents flash of login page)
+  if (loading) return <Spinner/>
 
   return (
     <Routes>
-      {/* ── Public ── */}
-      <Route path="/login"
-        element={user ? <Navigate to="/" replace/> : <LoginPage/>}/>
-      <Route path="/reset-password"
-        element={<ResetPasswordPage/>}/>
+      {/* Public */}
+      <Route path="/login"          element={user ? <Navigate to="/" replace/> : <LoginPage/>}/>
+      <Route path="/reset-password" element={<ResetPasswordPage/>}/>
 
-      {/* ── Protected ── */}
+      {/* Protected */}
       <Route path="/" element={<ProtectedRoute><DashboardLayout/></ProtectedRoute>}>
         <Route index            element={<DevicesPage/>}/>
         <Route path="sessions"  element={<SessionsPage/>}/>

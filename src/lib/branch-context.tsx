@@ -15,24 +15,32 @@ const BranchContext = createContext<BranchContextValue | null>(null)
 export function BranchProvider({ children }: { children: ReactNode }) {
   const { profile, loading: authLoading } = useAuth()
   const [branch, setBranch]   = useState<Branch | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Start as false — we only load if there's a branch_id
+  const [loading, setLoading] = useState(false)
 
-  const fetchBranch = async (branchId: string) => {
-    const { data } = await supabase
-      .from('branches')
-      .select('*')
-      .eq('id', branchId)
-      .single()
-    setBranch(data as Branch ?? null)
-    setLoading(false)
+  const fetchBranch = async (id: string) => {
+    setLoading(true)
+    try {
+      const { data } = await supabase
+        .from('branches')
+        .select('*')
+        .eq('id', id)
+        .single()
+      setBranch(data as Branch ?? null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
+    // Wait for auth to finish
     if (authLoading) return
+
     const id = profile?.branch_id
     if (id) {
       fetchBranch(id)
     } else {
+      // No branch_id — nothing to load, stay unblocked
       setBranch(null)
       setLoading(false)
     }

@@ -1,13 +1,13 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { Profile } from '@/types'
 
-export function requireAdmin(role: string | undefined | null)           { return role === 'admin' }
-export function requireStaff(role: string | undefined | null)           { return role === 'admin' || role === 'staff' }
-export function canAccessFinancialData(role: string | undefined | null) { return requireAdmin(role) }
-export function canManageSessions(role: string | undefined | null)      { return requireStaff(role) }
-export function canViewAuditLogs(role: string | undefined | null)       { return requireAdmin(role) }
+export function requireAdmin(r?: string | null)          { return r === 'admin' }
+export function requireStaff(r?: string | null)          { return r === 'admin' || r === 'staff' }
+export function canAccessFinancialData(r?: string | null){ return requireAdmin(r) }
+export function canManageSessions(r?: string | null)     { return requireStaff(r) }
+export function canViewAuditLogs(r?: string | null)      { return requireAdmin(r) }
 
 interface AuthContextValue {
   user:               User | null
@@ -19,12 +19,12 @@ interface AuthContextValue {
   canAccessFinancial: boolean
   canManageSession:   boolean
   canViewAudit:       boolean
-  signIn:         (email: string, password: string)              => Promise<{ error: AuthError | null }>
-  signUp:         (email: string, password: string, name: string)=> Promise<{ error: AuthError | null }>
-  signOut:        ()                                             => Promise<void>
-  resetPassword:  (email: string)                                => Promise<{ error: AuthError | null }>
-  updatePassword: (newPassword: string)                          => Promise<{ error: AuthError | null }>
-  refreshProfile: ()                                             => Promise<void>
+  signIn:         (email: string, password: string)               => Promise<{ error: AuthError | null }>
+  signUp:         (email: string, password: string, name: string) => Promise<{ error: AuthError | null }>
+  signOut:        ()                                              => Promise<void>
+  resetPassword:  (email: string)                                 => Promise<{ error: AuthError | null }>
+  updatePassword: (newPassword: string)                           => Promise<{ error: AuthError | null }>
+  refreshProfile: ()                                              => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -34,60 +34,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const initialized = useRef(false)
 
-  // Retry fetch — handles race condition after signUp trigger
-  const fetchProfile = async (userId: string, retries = 5): Promise<void> => {
-    for (let i = 0; i < retries; i++) {
+  async function loadProfile(userId: string): Promise<Profile | null> {
+    // Retry up to 5 times with backoff (handles trigger race condition)
+    for (let attempt = 0; attempt < 5; attempt++) {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()        // won't error if row doesn't exist yet
 
-      if (data) {
-        setProfile(data as Profile)
-        return
-      }
-
-      // Profile not yet created by trigger → wait and retry
-      if (error?.code === 'PGRST116' && i < retries - 1) {
-        await new Promise(r => setTimeout(r, 500 * (i + 1)))
-        continue
-      }
-      break
+      if (data) return data as Profile
+      if (!error || error.code !== 'PGRST116') break   // real error — stop
+      await new Promise(r => setTimeout(r, 600 * (attempt + 1)))
     }
+    return null
   }
 
   useEffect(() => {
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false))
-      } else {
-        setLoading(false)
-      }
-    })
+    // ── onAuthStateChange is the single source of truth ──
+    // getSession + onAuthStateChange both fire on mount;
+    // we use a flag so we only run once on initial load.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, sess) => {
+        setSession(sess)
+        setUser(sess?.user ?? null)
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-
-      if (session?.user) {
-        // PASSWORD_RECOVERY event — just set user, don't fetch profile yet
-        if (event === 'PASSWORD_RECOVERY') {
-          setLoading(false)
-          return
+        if (sess?.user) {
+          if (event === 'PASSWORD_RECOVERY') {
+            // Don't block UI — just let the reset page handle it
+            setLoading(false)
+            return
+          }
+          // Load profile (with retry for signup race condition)
+          const prof = await loadProfile(sess.user.id)
+          setProfile(prof)
+        } else {
+          setProfile(null)
         }
-        await fetchProfile(session.user.id)
-      } else {
-        setProfile(null)
-      }
-      setLoading(false)
-    })
 
-    return () => subscription.unsubscribe()
+        setLoading(false)
+        initialized.current = true
+      }
+    )
+
+    // Fallback: if no auth event fires within 3s, unblock UI
+    const timeout = setTimeout(() => {
+      if (!initialized.current) setLoading(false)
+    }, 3000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(timeout)
+    }
   }, [])
 
   const signIn = async (email: string, password: string) => {
@@ -101,7 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         data: { name },
-        // Email confirm URL — change to your domain in production
         emailRedirectTo: `${window.location.origin}/`,
       },
     })
@@ -110,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     setProfile(null)
+    setUser(null)
     await supabase.auth.signOut()
   }
 
@@ -126,7 +126,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id)
+    if (user) {
+      const prof = await loadProfile(user.id)
+      if (prof) setProfile(prof)
+    }
   }
 
   const role = profile?.role
