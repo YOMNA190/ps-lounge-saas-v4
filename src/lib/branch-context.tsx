@@ -4,60 +4,37 @@ import { Branch } from '@/types'
 import { useAuth } from '@/lib/auth-context'
 
 interface BranchContextValue {
-  branch:   Branch | null
+  branch: Branch | null
   branchId: string | null
-  loading:  boolean
-  refetch:  () => Promise<void>
+  loading: boolean
+  refetch: () => Promise<void>
 }
 
 const BranchContext = createContext<BranchContextValue | null>(null)
 
 export function BranchProvider({ children }: { children: ReactNode }) {
   const { profile, loading: authLoading } = useAuth()
-  const [branch, setBranch]   = useState<Branch | null>(null)
-  // Start as false — we only load if there's a branch_id
+  const [branch, setBranch] = useState<Branch | null>(null)
   const [loading, setLoading] = useState(false)
 
   const fetchBranch = async (id: string) => {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('branches')
-        .select('*')
-        .eq('id', id)
-        .single()
+      const { data } = await supabase.from('branches').select('*').eq('id', id).single()
       setBranch(data as Branch ?? null)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   useEffect(() => {
-    // Wait for auth to finish
     if (authLoading) return
-
     const id = profile?.branch_id
-    if (id) {
-      fetchBranch(id)
-    } else {
-      // No branch_id — nothing to load, stay unblocked
-      setBranch(null)
-      setLoading(false)
-    }
+    if (id) { fetchBranch(id) } else { setBranch(null); setLoading(false) }
   }, [profile?.branch_id, authLoading])
 
-  const refetch = async () => {
-    const id = profile?.branch_id
-    if (id) await fetchBranch(id)
-  }
+  const refetch = async () => { const id = profile?.branch_id; if (id) await fetchBranch(id) }
 
   return (
-    <BranchContext.Provider value={{
-      branch,
-      branchId: profile?.branch_id ?? null,
-      loading,
-      refetch,
-    }}>
+    <BranchContext.Provider value={{ branch, branchId: profile?.branch_id ?? null, loading, refetch }}>
       {children}
     </BranchContext.Provider>
   )

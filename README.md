@@ -1,144 +1,73 @@
-# 🎮 PS Lounge Manager — SaaS v4
+# React + TypeScript + Vite
 
-نظام إدارة متكامل لقاعات البلايستيشن — Cloud-Native · Multi-Tenant · Mobile-First
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
----
+Currently, two official plugins are available:
 
-## ⚡ إعداد سريع
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-### 1. متطلبات
-- Node.js 18+
-- حساب Supabase (مجاني)
-- حساب Vercel (مجاني)
+## React Compiler
 
-### 2. إعداد Supabase
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-1. اذهب إلى [supabase.com](https://supabase.com) وأنشئ مشروع جديد
-2. من **SQL Editor**، شغّل الـ migrations **بالترتيب**:
+## Expanding the ESLint configuration
 
-```
-supabase/migrations/001_initial_schema.sql      ← الجداول الأساسية
-supabase/migrations/002_inventory_shifts_pos.sql ← المخزن والشيفتات
-supabase/migrations/003_shift_pin_loyalty.sql   ← PIN والولاء والتحليلات
-supabase/migrations/004_internet_cards.sql      ← كروت الإنترنت
-supabase/migrations/005_functions.sql           ← الدوال الأساسية
-```
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
 
-> ⚠️ **مهم:** شغّلهم واحد واحد بالترتيب — لا تجمعهم كلهم مرة واحدة
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
 
-3. من **Authentication → Settings**:
-   - قم بتفعيل **Email confirmations** أو إلغاؤه حسب احتياجك
-   - أضف URL موقعك في **Redirect URLs**:
-     ```
-     https://your-site.vercel.app/**
-     ```
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
 
-### 3. تثبيت المشروع
-
-```bash
-git clone <your-repo>
-cd ps-lounge-saas-v4
-
-npm install
-
-cp .env.example .env.local
-# افتح .env.local وضع قيمتين:
-# VITE_SUPABASE_URL=...
-# VITE_SUPABASE_ANON_KEY=...
-
-npm run dev
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-### 4. رفع على Vercel
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-```bash
-npm run build          # تأكد من البناء بدون أخطاء
-npm i -g vercel
-vercel --prod
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
-
-في Vercel Dashboard → Settings → Environment Variables أضف:
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-
----
-
-## 🚀 أول مرة تدخل
-
-1. **سجّل حساب جديد** من صفحة تسجيل الدخول
-2. **Onboarding:** أدخل اسم المحل والعنوان
-3. النظام هينشئ تلقائياً: فرعك + 10 أجهزة + مصاريف افتراضية
-4. **تجربة مجانية 14 يوم** — لا يلزم كارت بنكي
-
----
-
-## 🏗️ الميزات
-
-| الميزة | الوصف |
-|--------|-------|
-| 🎮 الأجهزة | 10 PS4/PS5 · Real-time · Server-side timing |
-| 📋 الجلسات | تتبع كامل · تكلفة محسوبة server-side |
-| 🛒 البضاعة | POS كاشير · مخزن · تنبيه نقص |
-| 📶 كروت النت | WE/فودافون/اتصالات/أورانج · FIFO |
-| ⏰ الشيفتات | PIN أمان · تسوية الكاش |
-| 👥 العملاء | CRM · نظام ولاء · مكافآت |
-| 💰 المصاريف | قابلة للتعديل · P&L تلقائي |
-| 📊 التحليلات | إيرادات · أكثر الألعاب · Top عملاء |
-| ⚙️ الإعدادات | بيانات المحل · كلمة المرور |
-| 🔐 Auth | تسجيل · دخول · نسيت كلمة المرور |
-
----
-
-## 🔒 الأمان
-
-- **RLS** على كل الجداول — عزل كامل بين المحلات
-- **Server-side timing** — PostgreSQL NOW() فقط
-- **Branch isolation** — كل محل يشوف بياناته فقط
-- **RBAC** — Admin/Staff roles
-- **Double-click guard** — منع تكرار الجلسات
-
----
-
-## 📁 هيكل المشروع
-
-```
-src/
-├── App.tsx                    ← Routing + Auth guards
-├── main.tsx                   ← Providers setup
-├── components/
-│   ├── TrialGuard.tsx         ← Trial expiry enforcement
-│   ├── alerts/AlertsBell.tsx
-│   └── devices/
-│       ├── DeviceCard.tsx
-│       └── StartSessionModal.tsx
-├── hooks/
-│   ├── useDevices.ts
-│   └── useDashboard.ts
-├── lib/
-│   ├── auth-context.tsx       ← Auth + signUp + resetPassword
-│   ├── branch-context.tsx     ← Branch isolation
-│   ├── supabase.ts
-│   ├── sessions.ts
-│   ├── shifts.ts
-│   ├── inventory.ts
-│   ├── cards.ts
-│   ├── analytics.ts
-│   └── errors.ts
-├── pages/                     ← All 10 pages
-└── types/index.ts             ← All TypeScript types
-```
-
----
-
-## 🛠️ Tech Stack
-
-- **React 18** + TypeScript + Vite
-- **Supabase** (PostgreSQL + RLS + Realtime + Auth)
-- **Tailwind CSS** — Mobile-first
-- **Recharts** — Analytics charts
-- **Sonner** — Toast notifications
-- **date-fns** — Date formatting
-
----
-
-*PS Lounge Manager v4 · Built with Supabase + React*

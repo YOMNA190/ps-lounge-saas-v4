@@ -1,31 +1,30 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router'
 import { Toaster } from 'sonner'
+import { AuthProvider } from '@/lib/auth-context'
+import { BranchProvider } from '@/lib/branch-context'
 import App from './App'
-import { AuthProvider } from './lib/auth-context'
-import { BranchProvider } from './lib/branch-context'
 import './index.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <BranchProvider>
           <App />
           <Toaster
-            position="top-center"
+            position="top-left"
             toastOptions={{
               style: {
-                background: '#16161f',
-                border: '1px solid #1e1e2e',
-                color: '#e8e8f0',
-                fontFamily: 'IBM Plex Sans Arabic, sans-serif',
+                background: 'var(--ps-card)',
+                border: '1px solid var(--ps-border)',
+                color: 'var(--ps-text)',
               },
             }}
           />
         </BranchProvider>
       </AuthProvider>
     </BrowserRouter>
-  </React.StrictMode>,
+  </StrictMode>
 )
