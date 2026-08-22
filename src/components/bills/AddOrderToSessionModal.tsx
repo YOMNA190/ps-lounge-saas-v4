@@ -29,7 +29,7 @@ export default function AddOrderToSessionModal({ sessionId, onClose, onAdded }: 
       await addOrderToSession(sessionId, productId, 1)
       toast.success('تم إضافة الطلب')
       onAdded()
-    } catch (err) { toast.error('فشل إضافة الطلب') }
+    } catch { toast.error('فشل إضافة الطلب') }
     setAdding(null)
   }
 

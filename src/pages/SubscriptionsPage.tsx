@@ -3,7 +3,6 @@ import { useSubscriptions } from '@/hooks/useSubscriptions'
 import { supabase } from '@/lib/supabase'
 import { Customer } from '@/types'
 import { CreditCard, Plus, Search, Loader2, Clock } from 'lucide-react'
-import { toast } from 'sonner'
 import CreateSubscriptionModal from '@/components/subscriptions/CreateSubscriptionModal'
 import CustomerSubscriptionCard from '@/components/customers/CustomerSubscriptionCard'
 

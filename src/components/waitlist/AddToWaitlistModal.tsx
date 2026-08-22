@@ -59,7 +59,7 @@ export default function AddToWaitlistModal({ onClose, onAdded }: Props) {
             </div>
           )}
         </div>
-        {!selected && <input className="input text-sm" placeholder="الاسم" value={name} onChange={e => setName(e.target.value)} />}
+        {!selected && <><input className="input text-sm" placeholder="الاسم" value={name} onChange={e => setName(e.target.value)} /><input className="input text-sm" placeholder="رقم الهاتف (اختياري)" value={phone} onChange={e => setPhone(e.target.value)} dir="ltr" /></>}
         <div className="flex gap-2">
           {(['any', 'PS5', 'PS4'] as const).map(t => <button key={t} onClick={() => setDeviceType(t)} className={`flex-1 py-2 rounded-lg text-sm ${deviceType === t ? 'text-[var(--ps-blue-light)]' : 'text-ps-muted'}`} style={deviceType === t ? { background: 'rgba(0,87,255,0.1)' } : {}}>{t === 'any' ? 'أي' : t}</button>)}
         </div>

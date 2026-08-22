@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { Session } from '@/types'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
-import { ClipboardList, Clock, User, Gamepad2, Loader2 } from 'lucide-react'
+import { User, Gamepad2, Loader2 } from 'lucide-react'
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])

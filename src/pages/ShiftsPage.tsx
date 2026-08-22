@@ -36,14 +36,14 @@ export default function ShiftsPage() {
   const endShift = async () => {
     if (!activeShift) return
     try {
-      const { data, error } = await supabase.rpc('end_shift', {
+      const { error } = await supabase.rpc('end_shift', {
         p_shift_id: activeShift.id, p_pin: pin, p_closing_cash: Number(closingCash) || 0,
         p_cash_taken: 0, p_cash_left: Number(closingCash) || 0
       })
       if (error) throw error
       toast.success('تم إنهاء الشيفت')
       setPin(''); setClosingCash(''); load()
-    } catch (err) {
+    } catch {
       toast.error('PIN غير صحيح أو خطأ آخر')
     }
   }

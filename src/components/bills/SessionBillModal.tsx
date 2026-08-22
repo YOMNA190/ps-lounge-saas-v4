@@ -24,7 +24,7 @@ export default function SessionBillModal({ sessionId, deviceName, onClose, onSto
       const result = await stopSessionWithBill(sessionId, Number(discount) || 0, discountReason || undefined, paymentMethod)
       toast.success(`تم الإنهاء! الإجمالي: ${result.grand_total.toLocaleString()} ج`)
       onStopped()
-    } catch (err) {
+    } catch {
       toast.error('فشل إنهاء الجلسة')
       onClose()
     }

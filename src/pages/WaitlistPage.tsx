@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useWaitlist } from '@/hooks/useWaitlist'
-import { WaitlistEntry } from '@/types'
-import { ListOrdered, Plus, Loader2, Clock, Check, X, Phone } from 'lucide-react'
+import { ListOrdered, Plus, Loader2, Check, X, Phone } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import AddToWaitlistModal from '@/components/waitlist/AddToWaitlistModal'

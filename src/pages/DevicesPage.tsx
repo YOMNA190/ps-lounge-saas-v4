@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useDashboard } from '@/hooks/useDashboard'
 import DeviceCard from '@/components/devices/DeviceCard'
 import HappyHourBanner from '@/components/happy-hour/HappyHourBanner'
-import { TrendingUp, Wallet, Activity, Coins, Zap, Loader2 } from 'lucide-react'
+import { TrendingUp, Wallet, Activity, Coins, Zap } from 'lucide-react'
 
 function StatCard({ label, value, sub, icon, accent }: { label: string; value: string; sub?: string; icon: React.ReactNode; accent: string }) {
   return (

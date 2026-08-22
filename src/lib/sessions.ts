@@ -1,12 +1,10 @@
 import { supabase } from '@/lib/supabase'
 import { Session, SessionBill } from '@/types'
 import { sanitizeError } from '@/lib/errors'
+import { calculateSessionCharge } from '@/lib/businessRules'
 
 export function calculateSessionPrice(durationSeconds: number, hourlyRate: number): number {
-  if (durationSeconds < 0) durationSeconds = 0
-  if (hourlyRate < 0) hourlyRate = 0
-  const minutes = Math.max(Math.ceil(durationSeconds / 60), 1)
-  return Math.round((minutes / 60) * hourlyRate * 100) / 100
+  return calculateSessionCharge(durationSeconds, hourlyRate)
 }
 
 export async function startSession(deviceId: number, customerId?: string, mode = 'single', hourlyRate?: number, gamePlayed?: string): Promise<Session> {

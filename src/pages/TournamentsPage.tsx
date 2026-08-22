@@ -2,15 +2,12 @@ import { useState } from 'react'
 import { useTournaments } from '@/hooks/useTournaments'
 import { useNavigate } from 'react-router'
 import { supabase } from '@/lib/supabase'
-import { Tournament } from '@/types'
 import { Trophy, Plus, Calendar, Users, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuth } from '@/lib/auth-context'
 import { useBranch } from '@/lib/branch-context'
 
 export default function TournamentsPage() {
   const { tournaments, loading, refetch } = useTournaments()
-  const { isAdmin } = useAuth()
   const { branchId } = useBranch()
   const navigate = useNavigate()
   const [showAdd, setShowAdd] = useState(false)

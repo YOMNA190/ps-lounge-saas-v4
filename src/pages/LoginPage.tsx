@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { Link } from 'react-router'
-import { Gamepad2, Mail, Lock, Loader2 } from 'lucide-react'
+import { Gamepad2, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const { signIn, signUp } = useAuth()

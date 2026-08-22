@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import { useBranch } from '@/lib/branch-context'
-import { Settings2, Save, Loader2 } from 'lucide-react'
+import { Settings2, Save } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SettingsPage() {

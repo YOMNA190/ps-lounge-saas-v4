@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useDebts } from '@/hooks/useDebts'
-import { payDebt, waiveDebt } from '@/lib/debts'
+import { waiveDebt } from '@/lib/debts'
 import { Debt, DebtStatus } from '@/types'
 import { BookOpen, CreditCard, Trash2, Loader2, Wallet, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -28,7 +28,7 @@ export default function DebtsPage() {
   const handleWaive = async (debt: Debt) => {
     if (!confirm(`تأكيد إعفاء الدين: ${debt.reason}؟`)) return
     try { await waiveDebt(debt.id, 'إعفاء إداري'); toast.success('تم الإعفاء'); refetch() }
-    catch (err) { toast.error('فشل الإعفاء') }
+    catch { toast.error('فشل الإعفاء') }
   }
 
   return (

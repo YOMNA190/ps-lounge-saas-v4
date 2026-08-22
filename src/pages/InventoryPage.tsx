@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Product, Customer, SaleItem } from '@/types'
-import { Package, Plus, Minus, ShoppingCart, Search, Loader2 } from 'lucide-react'
+import { Product, Customer } from '@/types'
+import { Plus, Minus, ShoppingCart, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth-context'
 
@@ -82,7 +82,7 @@ export default function InventoryPage() {
       toast.success(`تم البيع بنجاح! الإجمالي: ${cartTotal.toLocaleString()} ج`)
       setCart([]); setShowCart(false); setSelectedCustomer(null)
       loadProducts()
-    } catch (err) {
+    } catch {
       toast.error('فشل إتمام البيع')
     }
   }

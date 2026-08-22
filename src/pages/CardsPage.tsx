@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { CardType, CardInventorySummary } from '@/types'
+import { CardInventorySummary } from '@/types'
 import { Wifi, Plus, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function CardsPage() {
-  const [types, setTypes] = useState<CardType[]>([])
   const [inventory, setInventory] = useState<CardInventorySummary[]>([])
   const [loading, setLoading] = useState(true)
   const [restockQty, setRestockQty] = useState<Record<number, string>>({})
@@ -14,11 +13,9 @@ export default function CardsPage() {
 
   const load = async () => {
     setLoading(true)
-    const [{ data: t }, { data: inv }] = await Promise.all([
-      supabase.from('card_types').select('*').eq('is_active', true).order('name'),
+    const [{ data: inv }] = await Promise.all([
       supabase.from('card_inventory_summary').select('*'),
     ])
-    setTypes(t || [])
     setInventory(inv || [])
     setLoading(false)
   }
@@ -33,11 +30,11 @@ export default function CardsPage() {
 
   const handleSell = async (typeId: number) => {
     try {
-      const { data, error } = await supabase.rpc('sell_card', { p_type_id: typeId })
+      const { error } = await supabase.rpc('sell_card', { p_type_id: typeId })
       if (error) throw error
       toast.success('تم البيع بنجاح')
       load()
-    } catch (err) {
+    } catch {
       toast.error('لا توجد كروت متاحة')
     }
   }

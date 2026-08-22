@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, Link } from 'react-router'
 import { useTournamentDetail } from '@/hooks/useTournaments'
 import { supabase } from '@/lib/supabase'
-import { TournamentParticipant, TournamentMatch } from '@/types'
+import { TournamentMatch } from '@/types'
 import { Trophy, ArrowRight, Users, Play, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import RegisterPlayerModal from '@/components/tournaments/RegisterPlayerModal'
@@ -22,11 +22,6 @@ export default function TournamentDetailPage() {
     acc[m.round].push(m)
     return acc
   }, {})
-
-  const handleSetWinner = async (matchId: string, winnerId: string) => {
-    await supabase.from('tournament_matches').update({ winner_id: winnerId, status: 'completed', completed_at: new Date().toISOString() }).eq('id', matchId)
-    refetch()
-  }
 
   const handleScore = async () => {
     if (!activeMatch) return

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Device } from '@/types'
-import { stopSession, calculateSessionPrice } from '@/lib/sessions'
-import { sanitizeError } from '@/lib/errors'
+import { calculateSessionPrice } from '@/lib/sessions'
 import { isGhostRisk } from '@/hooks/useDevices'
 import { Gamepad2, Clock, User, Play, Users } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,7 +25,6 @@ function useElapsedTime(startedAt: string | undefined) {
 interface Props { device: Device; onUpdate: () => void }
 
 export default function DeviceCard({ device, onUpdate }: Props) {
-  const [isProcessing, setIsProcessing] = useState(false)
   const [showStart, setShowStart] = useState(false)
   const [showBill, setShowBill] = useState(false)
   const [showAddOrder, setShowAddOrder] = useState(false)
@@ -45,18 +43,6 @@ export default function DeviceCard({ device, onUpdate }: Props) {
     }
     update(); const interval = setInterval(update, 1000); return () => clearInterval(interval)
   }, [session, device.price_single])
-
-  const handleEnd = async () => {
-    if (!session || isProcessing) return
-    setIsProcessing(true)
-    try {
-      await stopSession(session.id)
-      toast.success(`تمت الجلسة`)
-      onUpdate()
-    } catch (error) {
-      toast.error(sanitizeError(error).message)
-    } finally { setIsProcessing(false) }
-  }
 
   return (
     <>
@@ -98,8 +84,8 @@ export default function DeviceCard({ device, onUpdate }: Props) {
               <div className="font-mono text-sm font-bold text-center py-1" style={{ color: 'var(--ps-gold)' }}>{estimatedPrice.toLocaleString()} ج</div>
 
               <div className="flex gap-2">
-                <button onClick={() => setShowAddOrder(true)} disabled={isProcessing} className="btn-outline flex-1 text-xs py-2">طلب</button>
-                <button onClick={() => setShowBill(true)} disabled={isProcessing} className="btn-primary flex-1 text-xs py-2">إنهاء</button>
+                <button onClick={() => setShowAddOrder(true)} className="btn-outline flex-1 text-xs py-2">طلب</button>
+                <button onClick={() => setShowBill(true)} className="btn-primary flex-1 text-xs py-2">إنهاء</button>
               </div>
             </div>
           ) : (
@@ -109,7 +95,7 @@ export default function DeviceCard({ device, onUpdate }: Props) {
             </div>
           )}
 
-          {!isActive && <button onClick={() => setShowStart(true)} disabled={isProcessing} className="btn-primary w-full py-2.5 text-sm"><Play size={14} />بدء جلسة</button>}
+          {!isActive && <button onClick={() => setShowStart(true)} className="btn-primary w-full py-2.5 text-sm"><Play size={14} />بدء جلسة</button>}
         </div>
       </div>
 

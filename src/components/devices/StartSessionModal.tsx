@@ -42,7 +42,7 @@ export default function StartSessionModal({ device, onClose, onSuccess }: Props)
       await startSession(device.id, customerId, mode, undefined, finalGame || undefined)
       toast.success(`✓ بدأت الجلسة على ${device.name}`)
       onSuccess()
-    } catch (err) { toast.error('فشل بدء الجلسة') }
+    } catch { toast.error('فشل بدء الجلسة') }
     setLoading(false)
   }
 

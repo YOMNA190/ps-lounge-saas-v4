@@ -40,7 +40,7 @@ export default function CreateSubscriptionModal({ onClose, onCreated, plans }: P
       )
       toast.success('تم إنشاء الاشتراك')
       onCreated()
-    } catch (err) { toast.error('فشل الإنشاء'); setLoading(false) }
+    } catch { toast.error('فشل الإنشاء'); setLoading(false) }
   }
 
   return (

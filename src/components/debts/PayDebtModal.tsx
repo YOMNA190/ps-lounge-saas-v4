@@ -19,7 +19,7 @@ export default function PayDebtModal({ debt, onClose, onPaid }: Props) {
       await payDebt(debt.id, Number(amount), paymentMethod)
       toast.success('تم السداد بنجاح')
       onPaid()
-    } catch (err) {
+    } catch {
       toast.error('فشل السداد')
       setLoading(false)
     }

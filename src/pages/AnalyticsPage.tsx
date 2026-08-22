@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getDeviceRevenue, getTopCustomers, getTopGames } from '@/lib/analytics'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { BarChart3, Trophy, Gamepad2, TrendingUp, Clock, Loader2 } from 'lucide-react'
+import { BarChart3, Trophy, Gamepad2, Clock, Loader2 } from 'lucide-react'
 
 const COLORS = ['#0057ff','#9b6dff','#00e5a0','#ffc843','#ff3d5a','#00c8e0','#3d8bff','#c084fc','#34d399','#fb923c']
 

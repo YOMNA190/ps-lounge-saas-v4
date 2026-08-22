@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAuditLog } from '@/hooks/useAuditLog'
 import { AuditAction } from '@/types'
-import { Bell, Download, Loader2, Filter } from 'lucide-react'
+import { Bell, Download, Loader2 } from 'lucide-react'
 import { exportAuditLogToCSV } from '@/lib/audit'
 import AuditLogTable from '@/components/audit/AuditLogTable'
 
