@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Bell, X } from 'lucide-react'
 
@@ -6,16 +6,16 @@ export default function AlertsBell() {
   const [alerts, setAlerts] = useState<{ id: number; title: string; message: string; is_read: boolean }[]>([])
   const [show, setShow] = useState(false)
 
-  useEffect(() => {
-    load()
-    const sub = supabase.channel('alerts').on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, load).subscribe()
-    return () => { sub.unsubscribe() }
-  }, [])
-
   const load = async () => {
     const { data } = await supabase.from('alerts').select('*').eq('is_read', false).order('created_at', { ascending: false }).limit(10)
     setAlerts(data || [])
   }
+
+  useEffect(() => {
+    void load()
+    const sub = supabase.channel('alerts').on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, load).subscribe()
+    return () => { void sub.unsubscribe() }
+  }, [])
 
   const markRead = async (id: number) => {
     await supabase.from('alerts').update({ is_read: true }).eq('id', id)
