@@ -24,6 +24,7 @@ import WaitlistPage from './pages/WaitlistPage'
 import AuditLogPage from './pages/AuditLogPage'
 import CustomerPortalPage from './pages/CustomerPortalPage'
 import PublicDisplayPage from './pages/PublicDisplayPage'
+import CaseStudyPage from './pages/CaseStudyPage'
 import { Suspense } from 'react'
 
 function Spinner() {
@@ -60,6 +61,7 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/portal/:customerPhone" element={<CustomerPortalPage />} />
       <Route path="/display" element={<PublicDisplayPage />} />
+      <Route path="/case-study" element={<CaseStudyPage />} />
 
       {/* Protected */}
       <Route path="/" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
