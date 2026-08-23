@@ -12,14 +12,14 @@ export default function PackagesPage() {
   const [price, setPrice] = useState('')
   const [duration, setDuration] = useState('60')
 
-  useEffect(() => { load() }, [])
-
   const load = async () => {
     setLoading(true)
     const { data } = await supabase.from('packages').select('*').eq('is_active', true).order('price')
     setPackages(data || [])
     setLoading(false)
   }
+
+  useEffect(() => { void load() }, [])
 
   const handleAdd = async () => {
     const { error } = await supabase.from('packages').insert({ name, price: Number(price), duration_mins: Number(duration) })

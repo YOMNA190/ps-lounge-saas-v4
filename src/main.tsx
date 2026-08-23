@@ -5,6 +5,7 @@ import { Toaster } from 'sonner'
 import { AuthProvider } from '@/lib/auth-context'
 import { BranchProvider } from '@/lib/branch-context'
 import { ClockProvider } from '@/lib/clock-context'
+import { DeviceStateProvider } from '@/lib/device-state-context'
 import App from './App'
 import './index.css'
 
@@ -14,17 +15,19 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <BranchProvider>
           <ClockProvider>
-            <App />
-            <Toaster
-              position="top-left"
-              toastOptions={{
-                style: {
-                  background: 'var(--ps-card)',
-                  border: '1px solid var(--ps-border)',
-                  color: 'var(--ps-text)',
-                },
-              }}
-            />
+            <DeviceStateProvider>
+              <App />
+              <Toaster
+                position="top-left"
+                toastOptions={{
+                  style: {
+                    background: 'var(--ps-card)',
+                    border: '1px solid var(--ps-border)',
+                    color: 'var(--ps-text)',
+                  },
+                }}
+              />
+            </DeviceStateProvider>
           </ClockProvider>
         </BranchProvider>
       </AuthProvider>

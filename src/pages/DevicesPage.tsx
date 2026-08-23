@@ -20,7 +20,7 @@ function StatCard({ label, value, sub, icon, accent }: { label: string; value: s
 }
 
 export default function DevicesPage() {
-  const { devices, loading, refetch } = useDevices()
+  const { devices, loading, refreshDevice } = useDevices()
   const { isAdmin } = useAuth()
   const { summary } = useDashboard()
   const activeCount = devices.filter(d => d.active_session).length
@@ -58,7 +58,7 @@ export default function DevicesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {devices.map(device => <DeviceCard key={device.id} device={device} onUpdate={refetch} />)}
+          {devices.map(device => <DeviceCard key={device.id} device={device} onUpdate={() => refreshDevice(device.id)} />)}
         </div>
       )}
     </div>
