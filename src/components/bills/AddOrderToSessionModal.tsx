@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { addOrderToSession } from '@/lib/sessions'
 import { Product } from '@/types'
 import { supabase } from '@/lib/supabase'
+import { addOrderLineCommand } from '@/lib/commands'
+import { useBranch } from '@/lib/branch-context'
 import { X, Plus, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Props { sessionId: string; onClose: () => void; onAdded: () => void }
 
 export default function AddOrderToSessionModal({ sessionId, onClose, onAdded }: Props) {
+  const { branchId } = useBranch()
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -24,9 +26,10 @@ export default function AddOrderToSessionModal({ sessionId, onClose, onAdded }: 
   }
 
   const handleAdd = async (productId: number) => {
+    if (!branchId) { toast.error('تعذر تحديد الفرع'); return }
     setAdding(productId)
     try {
-      await addOrderToSession(sessionId, productId, 1)
+      await addOrderLineCommand({ branchId, sessionId, productId, quantity: 1 })
       toast.success('تم إضافة الطلب')
       onAdded()
     } catch { toast.error('فشل إضافة الطلب') }

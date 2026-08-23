@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import type { Device, Customer } from '@/types'
 import { POPULAR_GAMES } from '@/types'
-import { startSession } from '@/lib/sessions'
 import { supabase } from '@/lib/supabase'
+import { useBranch } from '@/lib/branch-context'
+import { createCustomerCommand, startSessionCommand } from '@/lib/commands'
 import { X, Search, UserPlus, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Props { device: Device; onClose: () => void; onSuccess: () => void }
 
 export default function StartSessionModal({ device, onClose, onSuccess }: Props) {
+  const { branchId } = useBranch()
   const [mode, setMode] = useState<'single' | 'multi'>('single')
   const [game, setGame] = useState('')
   const [customGame, setCustomGame] = useState('')
@@ -30,16 +32,20 @@ export default function StartSessionModal({ device, onClose, onSuccess }: Props)
   }, [search])
 
   const handleStart = async () => {
+    if (!branchId) { toast.error('تعذر تحديد الفرع'); return }
     setLoading(true)
     let customerId = selected?.id
     if (newMode && newName.trim()) {
-      const { data, error } = await supabase.from('customers').insert({ name: newName.trim(), phone: newPhone.trim() || null }).select().single()
-      if (error) { toast.error('فشل إنشاء العميل'); setLoading(false); return }
-      customerId = data.id
+      try {
+        const result = await createCustomerCommand({ branchId, name: newName.trim(), phone: newPhone.trim() || undefined })
+        customerId = result.customer.id
+      } catch {
+        toast.error('فشل إنشاء العميل'); setLoading(false); return
+      }
     }
     const finalGame = game === 'أخرى' ? customGame : game
     try {
-      await startSession(device.id, customerId, mode, undefined, finalGame || undefined)
+      await startSessionCommand({ branchId, deviceId: device.id, customerId, mode, gamePlayed: finalGame || undefined })
       toast.success(`✓ بدأت الجلسة على ${device.name}`)
       onSuccess()
     } catch { toast.error('فشل بدء الجلسة') }

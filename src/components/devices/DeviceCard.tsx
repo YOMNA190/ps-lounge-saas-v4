@@ -1,26 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { Device } from '@/types'
 import { calculateSessionPrice } from '@/lib/sessions'
 import { isGhostRisk } from '@/hooks/useDevices'
+import { useCurrentTime } from '@/lib/clock-context'
+import { elapsedSeconds, formatElapsedTime } from '@/lib/clock'
 import { Gamepad2, Clock, User, Play, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import StartSessionModal from './StartSessionModal'
 import SessionBillModal from '../bills/SessionBillModal'
 import AddOrderToSessionModal from '../bills/AddOrderToSessionModal'
-
-function useElapsedTime(startedAt: string | undefined) {
-  const [elapsed, setElapsed] = useState('')
-  useEffect(() => {
-    if (!startedAt) { setElapsed(''); return }
-    const update = () => {
-      const diff = Date.now() - new Date(startedAt).getTime()
-      const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000), s = Math.floor((diff % 60000) / 1000)
-      setElapsed(`${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`)
-    }
-    update(); const id = setInterval(update, 1000); return () => clearInterval(id)
-  }, [startedAt])
-  return elapsed
-}
 
 interface Props { device: Device; onUpdate: () => void }
 
@@ -28,21 +16,17 @@ export default function DeviceCard({ device, onUpdate }: Props) {
   const [showStart, setShowStart] = useState(false)
   const [showBill, setShowBill] = useState(false)
   const [showAddOrder, setShowAddOrder] = useState(false)
-  const [estimatedPrice, setEstimatedPrice] = useState(0)
+  const now = useCurrentTime()
 
   const isActive = !!device.active_session
   const session = device.active_session
-  const elapsed = useElapsedTime(session?.started_at)
-  const ghostRisk = session ? isGhostRisk(session.started_at) : false
-
-  useEffect(() => {
-    if (!session) { setEstimatedPrice(0); return }
-    const update = () => {
-      const durationSeconds = (Date.now() - new Date(session.started_at).getTime()) / 1000
-      setEstimatedPrice(calculateSessionPrice(durationSeconds, device.price_single || 0))
-    }
-    update(); const interval = setInterval(update, 1000); return () => clearInterval(interval)
-  }, [session, device.price_single])
+  const durationSeconds = elapsedSeconds(session?.started_at, now)
+  const elapsed = formatElapsedTime(durationSeconds)
+  const ghostRisk = session ? isGhostRisk(session.started_at, now) : false
+  const estimatedPrice = useMemo(
+    () => session ? calculateSessionPrice(durationSeconds, device.price_single || 0) : 0,
+    [device.price_single, durationSeconds, session],
+  )
 
   return (
     <>

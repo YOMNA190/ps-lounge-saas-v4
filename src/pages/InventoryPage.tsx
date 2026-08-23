@@ -3,10 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { Product, Customer } from '@/types'
 import { Plus, Minus, ShoppingCart, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuth } from '@/lib/auth-context'
+import { useBranch } from '@/lib/branch-context'
+import { recordPosSale } from '@/lib/commands'
 
 export default function InventoryPage() {
-  const { profile } = useAuth()
+  const { branchId } = useBranch()
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -59,27 +60,14 @@ export default function InventoryPage() {
   const cartTotal = cart.reduce((s, c) => s + c.product.sell_price * c.qty, 0)
 
   const handleCheckout = async () => {
-    if (cart.length === 0) return
+    if (cart.length === 0 || !branchId) return
     try {
-      const { data: sale, error: saleError } = await supabase.from('sales').insert({
-        customer_id: selectedCustomer?.id || null,
-        staff_id: profile?.id,
-        total: cartTotal,
-        branch_id: (await supabase.rpc('get_my_branch_id')).data
-      }).select().single()
-
-      if (saleError) throw saleError
-
-      const items = cart.map(c => ({
-        sale_id: sale.id,
-        product_id: c.product.id,
-        qty: c.qty,
-        unit_price: c.product.sell_price,
-        unit_cost: c.product.cost_price,
-      }))
-
-      await supabase.from('sale_items').insert(items)
-      toast.success(`تم البيع بنجاح! الإجمالي: ${cartTotal.toLocaleString()} ج`)
+      const result = await recordPosSale({
+        branchId,
+        customerId: selectedCustomer?.id ?? null,
+        items: cart.map((item) => ({ productId: item.product.id, quantity: item.qty })),
+      })
+      toast.success(`تم البيع بنجاح! الإجمالي: ${result.sale.total.toLocaleString()} ج`)
       setCart([]); setShowCart(false); setSelectedCustomer(null)
       loadProducts()
     } catch {

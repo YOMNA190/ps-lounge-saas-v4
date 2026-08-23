@@ -4,12 +4,16 @@ import { Shift } from '@/types'
 import { Clock, Play, Square, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth-context'
+import { useBranch } from '@/lib/branch-context'
 import { calculateShiftCloseout } from '@/lib/businessRules'
+import { invokeCommand } from '@/lib/commands'
 
 type ShiftPreview = { sessionsRevenue: number; salesRevenue: number }
 
 export default function ShiftsPage() {
   const { profile } = useAuth()
+  const { branchId } = useBranch()
+  const profileId = profile?.id
   const [activeShift, setActiveShift] = useState<Shift | null>(null)
   const [shifts, setShifts] = useState<Shift[]>([])
   const [loading, setLoading] = useState(true)
@@ -26,10 +30,10 @@ export default function ShiftsPage() {
     ])
     setActiveShift(active)
     setShifts(past || [])
-    if (active && profile?.id) {
+    if (active && profileId) {
       const [sessions, sales] = await Promise.all([
-        supabase.from('sessions').select('cost').eq('staff_id', profile.id).gte('started_at', active.started_at).not('ended_at', 'is', null),
-        supabase.from('sales').select('total').eq('staff_id', profile.id).gte('created_at', active.started_at),
+        supabase.from('sessions').select('cost').eq('staff_id', profileId).gte('started_at', active.started_at).not('ended_at', 'is', null),
+        supabase.from('sales').select('total').eq('staff_id', profileId).gte('created_at', active.started_at),
       ])
       setPreview({
         sessionsRevenue: (sessions.data || []).reduce((sum, row) => sum + Number(row.cost || 0), 0),
@@ -39,7 +43,7 @@ export default function ShiftsPage() {
       setPreview(null)
     }
     setLoading(false)
-  }, [profile?.id])
+  }, [profileId])
 
   useEffect(() => { void load() }, [load])
 
@@ -48,20 +52,24 @@ export default function ShiftsPage() {
     : null
 
   const startShift = async () => {
-    const { error } = await supabase.from('shifts').insert({ opening_cash: Number(openingCash) || 0, staff_id: profile?.id })
-    if (error) toast.error('فشل بدء الشيفت')
-    else { toast.success('بدأ الشيفت'); setOpeningCash(''); load() }
+    if (!branchId) { toast.error('تعذر تحديد الفرع'); return }
+    try {
+      await invokeCommand({ action: 'openShift', branchId, openingCash: Number(openingCash) || 0 })
+      toast.success('بدأ الشيفت'); setOpeningCash(''); load()
+    } catch { toast.error('فشل بدء الشيفت') }
   }
 
   const endShift = async () => {
     if (!activeShift) return
+    if (!branchId) { toast.error('تعذر تحديد الفرع'); return }
     if (!closingCash) { toast.error('أدخل الكاش النهائي بعد العد'); return }
     try {
-      const { error } = await supabase.rpc('end_shift', {
-        p_shift_id: activeShift.id, p_pin: pin, p_closing_cash: Number(closingCash) || 0,
-        p_cash_taken: closeout?.recommendedCashTaken || 0, p_cash_left: closeout?.recommendedCashLeft || 0
+      await invokeCommand({
+        action: 'closeShift', branchId, shiftId: activeShift.id, pin,
+        closingCash: Number(closingCash) || 0,
+        cashTaken: closeout?.recommendedCashTaken || 0,
+        cashLeft: closeout?.recommendedCashLeft || 0,
       })
-      if (error) throw error
       toast.success('تم إنهاء الشيفت')
       setPin(''); setClosingCash(''); load()
     } catch {

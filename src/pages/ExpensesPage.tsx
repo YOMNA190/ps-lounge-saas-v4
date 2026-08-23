@@ -3,8 +3,11 @@ import { supabase } from '@/lib/supabase'
 import { Expense } from '@/types'
 import { Receipt, Save, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useBranch } from '@/lib/branch-context'
+import { updateExpenseCommand } from '@/lib/commands'
 
 export default function ExpensesPage() {
+  const { branchId } = useBranch()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -23,11 +26,12 @@ export default function ExpensesPage() {
   }
 
   const handleSave = async () => {
+    if (!branchId) { toast.error('تعذر تحديد الفرع'); return }
     setSaving(true)
     try {
-      for (const e of expenses) {
-        await supabase.rpc('update_expense', { p_expense_id: e.id, p_amount: e.amount, p_name: e.name })
-      }
+      await Promise.all(expenses.map((expense) => updateExpenseCommand({
+        branchId, expenseId: expense.id, amount: expense.amount, name: expense.name,
+      })))
       toast.success('تم الحفظ')
     } catch {
       toast.error('فشل الحفظ')

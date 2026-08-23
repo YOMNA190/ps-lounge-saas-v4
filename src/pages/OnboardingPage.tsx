@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { invokeCommand } from '@/lib/commands'
 import { toast } from 'sonner'
 import { Building2, Loader2 } from 'lucide-react'
 
@@ -16,8 +16,12 @@ export default function OnboardingPage({ onDone }: { onDone: () => void }) {
     if (!user) return
     setLoading(true)
     try {
-      const { error } = await supabase.rpc('setup_new_branch', { p_user_id: user.id, p_branch_name: name.trim(), p_address: address.trim() || null, p_phone: phone.trim() || null })
-      if (error) throw error
+      await invokeCommand({
+        action: 'provisionBranch',
+        branchName: name.trim(),
+        address: address.trim() || undefined,
+        phone: phone.trim() || undefined,
+      })
       toast.success('تم الإعداد!')
       onDone()
     } catch (err) { toast.error('فشل: ' + String(err)) }

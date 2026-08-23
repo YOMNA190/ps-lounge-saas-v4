@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { Device, Session } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { useBranch } from '@/lib/branch-context'
-import { subscribeToSessions } from '@/lib/sessions'
 
 export function useDevices() {
   const { branchId } = useBranch()
@@ -10,7 +9,11 @@ export function useDevices() {
   const [loading, setLoading] = useState(true)
 
   const fetchDevices = useCallback(async () => {
-    if (!branchId) return
+    if (!branchId) {
+      setDevices([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const { data: devicesData, error } = await supabase.from('devices').select('*').eq('branch_id', branchId).eq('is_active', true).order('id')
     if (error) { setLoading(false); return }
@@ -30,15 +33,38 @@ export function useDevices() {
 
   useEffect(() => { fetchDevices() }, [fetchDevices])
 
+  const refreshDeviceSession = useCallback(async (deviceId: number) => {
+    if (!branchId) return
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*,customer:customers(*)')
+      .eq('branch_id', branchId)
+      .eq('device_id', deviceId)
+      .is('ended_at', null)
+      .maybeSingle()
+
+    if (error) return
+    setDevices((current) => current.map((device) => (
+      device.id === deviceId ? { ...device, active_session: (data as Session | null) } : device
+    )))
+  }, [branchId])
+
   useEffect(() => {
     if (!branchId) return
-    const sub = subscribeToSessions(fetchDevices, branchId)
-    return () => { sub.unsubscribe() }
-  }, [branchId, fetchDevices])
+    const channel = supabase
+      .channel(`device-session-deltas-${branchId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions', filter: `branch_id=eq.${branchId}` }, (payload) => {
+        const changed = (payload.new as Partial<Session>)?.device_id ?? (payload.old as Partial<Session>)?.device_id
+        if (typeof changed === 'number') void refreshDeviceSession(changed)
+      })
+      .subscribe()
+
+    return () => { void supabase.removeChannel(channel) }
+  }, [branchId, refreshDeviceSession])
 
   return { devices, loading, refetch: fetchDevices }
 }
 
-export function isGhostRisk(startedAt: string): boolean {
-  return Date.now() - new Date(startedAt).getTime() > 4 * 3600000
+export function isGhostRisk(startedAt: string, now = Date.now()): boolean {
+  return now - new Date(startedAt).getTime() > 4 * 3600000
 }

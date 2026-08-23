@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { getSessionBill, stopSessionWithBill } from '@/lib/sessions'
+import { getSessionBill } from '@/lib/sessions'
+import { closeSessionCommand } from '@/lib/commands'
+import { useBranch } from '@/lib/branch-context'
 import { SessionBill, PAYMENT_METHODS } from '@/types'
 import { X, Receipt, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -7,6 +9,7 @@ import { toast } from 'sonner'
 interface Props { sessionId: string; deviceName: string; onClose: () => void; onStopped: () => void }
 
 export default function SessionBillModal({ sessionId, deviceName, onClose, onStopped }: Props) {
+  const { branchId } = useBranch()
   const [bill, setBill] = useState<SessionBill | null>(null)
   const [discount, setDiscount] = useState('')
   const [discountReason, setDiscountReason] = useState('')
@@ -19,9 +22,16 @@ export default function SessionBillModal({ sessionId, deviceName, onClose, onSto
   }, [sessionId])
 
   const handleStop = async () => {
+    if (!branchId) { toast.error('تعذر تحديد الفرع'); return }
     setProcessing(true)
     try {
-      const result = await stopSessionWithBill(sessionId, Number(discount) || 0, discountReason || undefined, paymentMethod)
+      const result = await closeSessionCommand({
+        branchId,
+        sessionId,
+        discountAmount: Number(discount) || 0,
+        discountReason: discountReason || undefined,
+        paymentMethod: paymentMethod as 'cash' | 'vodafone_cash' | 'instapay' | 'debt' | 'subscription',
+      })
       toast.success(`تم الإنهاء! الإجمالي: ${result.grand_total.toLocaleString()} ج`)
       onStopped()
     } catch {

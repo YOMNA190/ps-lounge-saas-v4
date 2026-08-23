@@ -5,8 +5,11 @@ import { useNavigate } from 'react-router'
 import { Users, Search, Plus, Phone, Star, X, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import CustomerRankBadge from '@/components/customers/CustomerRankBadge'
+import { useBranch } from '@/lib/branch-context'
+import { createCustomerCommand } from '@/lib/commands'
 
 export default function CustomersPage() {
+  const { branchId } = useBranch()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -27,10 +30,13 @@ export default function CustomersPage() {
   const filtered = customers.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone?.includes(search))
 
   const handleAdd = async () => {
-    if (!newName.trim()) return
-    const { error } = await supabase.from('customers').insert({ name: newName.trim(), phone: newPhone.trim() || null })
-    if (error) toast.error(error.message.includes('unique') ? 'رقم الموبايل موجود' : 'فشل الإضافة')
-    else { toast.success('تم الإضافة'); setNewName(''); setNewPhone(''); setShowAdd(false); load() }
+    if (!newName.trim() || !branchId) return
+    try {
+      await createCustomerCommand({ branchId, name: newName.trim(), phone: newPhone.trim() || undefined })
+      toast.success('تم الإضافة'); setNewName(''); setNewPhone(''); setShowAdd(false); load()
+    } catch (error) {
+      toast.error(String(error).includes('unique') ? 'رقم الموبايل موجود' : 'فشل الإضافة')
+    }
   }
 
   return (
