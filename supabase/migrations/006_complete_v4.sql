@@ -1,6 +1,7 @@
 -- ============================================================
 -- PS Lounge Manager v4 — Complete Migration
 -- Includes: Bug fixes + All 10 Phases
+-- Prerequisite: the baseline schema (001–005) must already exist.
 -- ============================================================
 
 -- ============================================================
@@ -13,7 +14,9 @@ UPDATE alerts SET branch_id = get_my_branch_id() WHERE branch_id IS NULL;
 ALTER TABLE alerts ALTER COLUMN branch_id SET NOT NULL;
 
 DROP POLICY IF EXISTS "alerts_select" ON alerts;
+DROP POLICY IF EXISTS "alerts_insert" ON alerts;
 DROP POLICY IF EXISTS "alerts_update" ON alerts;
+DROP POLICY IF EXISTS "alerts_delete" ON alerts;
 
 CREATE POLICY "alerts_select" ON alerts FOR SELECT TO authenticated USING (branch_id = get_my_branch_id());
 CREATE POLICY "alerts_insert" ON alerts FOR INSERT TO authenticated WITH CHECK (branch_id = get_my_branch_id());
@@ -33,14 +36,24 @@ DROP POLICY IF EXISTS "sessions_update" ON sessions;
 CREATE POLICY "sessions_update_notes" ON sessions FOR UPDATE TO authenticated USING (branch_id = get_my_branch_id() AND ended_at IS NULL) WITH CHECK (branch_id = get_my_branch_id());
 
 -- BUG 4: updated_at triggers
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
-$$ LANGUAGE plpgsql;
+ALTER TABLE branches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
-CREATE TRIGGER IF NOT EXISTS trg_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER IF NOT EXISTS trg_branches_updated_at BEFORE UPDATE ON branches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER IF NOT EXISTS trg_devices_updated_at BEFORE UPDATE ON devices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER IF NOT EXISTS trg_customers_updated_at BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$;
+
+DROP TRIGGER IF EXISTS trg_products_updated_at ON products;
+DROP TRIGGER IF EXISTS trg_branches_updated_at ON branches;
+DROP TRIGGER IF EXISTS trg_devices_updated_at ON devices;
+DROP TRIGGER IF EXISTS trg_customers_updated_at ON customers;
+CREATE TRIGGER trg_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_branches_updated_at BEFORE UPDATE ON branches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_devices_updated_at BEFORE UPDATE ON devices FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER trg_customers_updated_at BEFORE UPDATE ON customers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- BUG 5: Missing foreign key indexes
 CREATE INDEX IF NOT EXISTS idx_sessions_customer ON sessions(customer_id);
@@ -51,6 +64,27 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id);
 CREATE INDEX IF NOT EXISTS idx_sale_items_product ON sale_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_devices_branch_active ON devices(branch_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_branches_owner ON branches(owner_id);
+CREATE INDEX IF NOT EXISTS idx_card_types_branch ON card_types(branch_id);
+CREATE INDEX IF NOT EXISTS idx_cards_sold_by ON cards(sold_by);
+CREATE INDEX IF NOT EXISTS idx_cards_sold_to ON cards(sold_to);
+CREATE INDEX IF NOT EXISTS idx_inventory_categories_branch ON inventory_categories(branch_id);
+CREATE INDEX IF NOT EXISTS idx_packages_branch ON packages(branch_id);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_branch ON profiles(branch_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_branch ON reservations(branch_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_customer ON reservations(customer_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_device ON reservations(device_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_package ON reservations(package_id);
+CREATE INDEX IF NOT EXISTS idx_shifts_staff ON shifts(staff_id);
+
+-- Existing reporting views must respect the querying user's RLS policies.
+ALTER VIEW customer_monthly_spending SET (security_invoker = true);
+ALTER VIEW daily_device_revenue SET (security_invoker = true);
+ALTER VIEW top_customers_monthly SET (security_invoker = true);
+ALTER VIEW top_games_monthly SET (security_invoker = true);
+ALTER VIEW card_inventory_summary SET (security_invoker = true);
+ALTER VIEW card_sales_report SET (security_invoker = true);
 
 -- ============================================================
 -- PHASE 1: AUDIT LOG SYSTEM
@@ -91,6 +125,9 @@ BEGIN
 END;
 $$;
 
+ALTER FUNCTION log_audit(TEXT, TEXT, TEXT, JSONB, JSONB, TEXT) SET search_path = public, pg_temp;
+REVOKE ALL ON FUNCTION log_audit(TEXT, TEXT, TEXT, JSONB, JSONB, TEXT) FROM PUBLIC;
+
 -- ============================================================
 -- PHASE 2: UNIFIED BILL SYSTEM
 -- ============================================================
@@ -101,12 +138,20 @@ ALTER TABLE sessions ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(10,2) DEFA
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS discount_reason TEXT;
 ALTER TABLE sales ADD COLUMN IF NOT EXISTS is_paid BOOLEAN DEFAULT FALSE;
 
+-- stop_session_with_bill maintains these customer aggregates, so they must
+-- exist before that function is created and can be executed.
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS rank TEXT DEFAULT 'bronze' CHECK (rank IN ('bronze', 'silver', 'gold', 'champion'));
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_hours NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_spent NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS visit_count INTEGER DEFAULT 0;
+
 CREATE OR REPLACE FUNCTION add_order_to_session(
   p_session_id UUID, p_product_id INTEGER, p_qty INTEGER, p_notes TEXT DEFAULT NULL
 ) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
   sess sessions; prod products; sale_rec sales; item sale_items; my_branch UUID;
 BEGIN
+  IF p_qty IS NULL OR p_qty <= 0 THEN RAISE EXCEPTION 'INVALID_QUANTITY'; END IF;
   my_branch := get_my_branch_id();
   SELECT * INTO sess FROM sessions WHERE id = p_session_id AND branch_id = my_branch AND ended_at IS NULL FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'SESSION_NOT_ACTIVE: الجلسة غير موجودة أو منتهية'; END IF;
@@ -120,13 +165,17 @@ BEGIN
   END IF;
 
   INSERT INTO sale_items(sale_id, product_id, qty, unit_price, unit_cost) VALUES(sale_rec.id, p_product_id, p_qty, prod.sell_price, prod.cost_price) RETURNING * INTO item;
-  UPDATE products SET stock_qty = stock_qty - p_qty WHERE id = p_product_id;
+  -- trg_after_sale_item already updates the sale total and reduces stock once.
 
   PERFORM log_audit('order_added_to_session', 'sale_items', item.id::TEXT, NULL, jsonb_build_object('session_id', p_session_id, 'product', prod.name, 'qty', p_qty, 'price', prod.sell_price), 'Order added to session ' || p_session_id);
 
   RETURN jsonb_build_object('success', true, 'sale_id', sale_rec.id, 'item_id', item.id, 'product_name', prod.name, 'qty', p_qty, 'unit_price', prod.sell_price, 'subtotal', p_qty * prod.sell_price);
 END;
 $$;
+
+ALTER FUNCTION add_order_to_session(UUID, INTEGER, INTEGER, TEXT) SET search_path = public, pg_temp;
+REVOKE ALL ON FUNCTION add_order_to_session(UUID, INTEGER, INTEGER, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION add_order_to_session(UUID, INTEGER, INTEGER, TEXT) TO authenticated;
 
 CREATE OR REPLACE FUNCTION get_session_bill(p_session_id UUID) RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE
@@ -140,15 +189,24 @@ BEGIN
   ELSE session_cost := ROUND(GREATEST(EXTRACT(EPOCH FROM (NOW() - sess.started_at)) / 3600.0, 1.0/60.0) * CASE WHEN sess.mode = 'single' THEN dev.price_single ELSE dev.price_multi END, 2);
   END IF;
 
-  SELECT * INTO sale_rec FROM sales WHERE session_id = p_session_id;
-  SELECT COALESCE(jsonb_agg(jsonb_build_object('product_name', p.name, 'qty', si.qty, 'unit_price', si.unit_price, 'subtotal', si.subtotal)), '[]'::jsonb) INTO items
-  FROM sale_items si JOIN products p ON p.id = si.product_id WHERE si.sale_id = sale_rec.id;
-
-  orders_total := COALESCE(sale_rec.total, 0); discount := COALESCE(sess.discount_amount, 0); grand_total := session_cost + orders_total - discount;
+  SELECT * INTO sale_rec FROM sales WHERE session_id = p_session_id AND branch_id = get_my_branch_id() ORDER BY created_at DESC LIMIT 1;
+  IF FOUND THEN
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('product_name', p.name, 'qty', si.qty, 'unit_price', si.unit_price, 'subtotal', si.subtotal)), '[]'::jsonb) INTO items
+    FROM sale_items si JOIN products p ON p.id = si.product_id WHERE si.sale_id = sale_rec.id;
+    orders_total := COALESCE(sale_rec.total, 0);
+  ELSE
+    items := '[]'::jsonb;
+    orders_total := 0;
+  END IF;
+  discount := COALESCE(sess.discount_amount, 0); grand_total := COALESCE(session_cost, 0) + orders_total - discount;
 
   RETURN jsonb_build_object('session_id', p_session_id, 'device_name', dev.name, 'customer_name', (SELECT name FROM customers WHERE id = sess.customer_id), 'started_at', sess.started_at, 'ended_at', sess.ended_at, 'mode', sess.mode, 'session_cost', session_cost, 'orders', items, 'orders_total', orders_total, 'discount', discount, 'discount_reason', sess.discount_reason, 'grand_total', GREATEST(grand_total, 0), 'payment_method', sess.payment_method, 'is_paid', sess.is_paid);
 END;
 $$;
+
+ALTER FUNCTION get_session_bill(UUID) SET search_path = public, pg_temp;
+REVOKE ALL ON FUNCTION get_session_bill(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION get_session_bill(UUID) TO authenticated;
 
 CREATE OR REPLACE FUNCTION stop_session_with_bill(
   p_session_id UUID, p_discount_amount NUMERIC DEFAULT 0, p_discount_reason TEXT DEFAULT NULL, p_payment_method TEXT DEFAULT 'cash'
@@ -157,46 +215,47 @@ DECLARE
   sess sessions; dev devices; dur_h NUMERIC; rate NUMERIC; session_cost NUMERIC; sale_rec sales; orders_total NUMERIC; grand_total NUMERIC;
 BEGIN
   IF p_payment_method NOT IN ('cash', 'vodafone_cash', 'instapay', 'debt', 'subscription') THEN RAISE EXCEPTION 'INVALID_PAYMENT_METHOD'; END IF;
+  IF p_discount_amount IS NULL OR p_discount_amount < 0 THEN RAISE EXCEPTION 'INVALID_DISCOUNT'; END IF;
   SELECT * INTO sess FROM sessions WHERE id = p_session_id AND branch_id = get_my_branch_id() AND ended_at IS NULL FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'SESSION_NOT_FOUND'; END IF;
+  IF p_payment_method = 'debt' AND sess.customer_id IS NULL THEN RAISE EXCEPTION 'DEBT_REQUIRES_CUSTOMER'; END IF;
   SELECT * INTO dev FROM devices WHERE id = sess.device_id;
 
   dur_h := GREATEST(EXTRACT(EPOCH FROM (NOW() - sess.started_at)) / 3600.0, 1.0/60.0);
   rate := CASE WHEN sess.mode = 'single' THEN dev.price_single ELSE dev.price_multi END;
   session_cost := ROUND(dur_h * rate, 2);
 
-  SELECT COALESCE(total, 0) INTO orders_total FROM sales WHERE session_id = p_session_id;
+  SELECT COALESCE(SUM(total), 0) INTO orders_total FROM sales WHERE session_id = p_session_id AND branch_id = get_my_branch_id();
   IF p_discount_amount > session_cost + orders_total THEN RAISE EXCEPTION 'DISCOUNT_TOO_HIGH: الخصم أكبر من الإجمالي'; END IF;
   grand_total := session_cost + orders_total - p_discount_amount;
 
   UPDATE sessions SET ended_at = NOW(), cost = session_cost, discount_amount = p_discount_amount, discount_reason = p_discount_reason, payment_method = p_payment_method, is_paid = CASE WHEN p_payment_method = 'debt' THEN FALSE ELSE TRUE END WHERE id = p_session_id RETURNING * INTO sess;
   UPDATE sales SET is_paid = CASE WHEN p_payment_method = 'debt' THEN FALSE ELSE TRUE END WHERE session_id = p_session_id;
 
-  IF sess.customer_id IS NOT NULL AND grand_total > 0 AND p_payment_method != 'debt' THEN
-    UPDATE customers SET points = points + FLOOR(grand_total), total_spent = total_spent + grand_total, total_hours = total_hours + dur_h, visit_count = visit_count + 1 WHERE id = sess.customer_id;
-  END IF;
-
-  IF p_payment_method = 'debt' AND sess.customer_id IS NOT NULL THEN
-    INSERT INTO debts(customer_id, session_id, amount, reason, status, created_by, branch_id) VALUES(sess.customer_id, p_session_id, grand_total, 'Gaming session + orders', 'pending', auth.uid(), get_my_branch_id());
+  IF sess.customer_id IS NOT NULL THEN
+    IF grand_total > 0 AND p_payment_method != 'debt' THEN
+      UPDATE customers SET points = points + FLOOR(grand_total), total_spent = total_spent + grand_total, total_hours = total_hours + dur_h, visit_count = visit_count + 1 WHERE id = sess.customer_id;
+    END IF;
+    IF p_payment_method = 'debt' THEN
+      INSERT INTO debts(customer_id, session_id, amount, reason, status, created_by, branch_id) VALUES(sess.customer_id, p_session_id, grand_total, 'Gaming session + orders', 'pending', auth.uid(), get_my_branch_id());
+    END IF;
+    PERFORM check_and_award_achievements(sess.customer_id);
+    PERFORM update_customer_rank(sess.customer_id);
   END IF;
 
   PERFORM log_audit('session_stop', 'sessions', sess.id::TEXT, jsonb_build_object('started_at', sess.started_at, 'cost', NULL, 'is_paid', FALSE), jsonb_build_object('ended_at', sess.ended_at, 'cost', session_cost, 'discount', p_discount_amount, 'payment', p_payment_method, 'grand_total', grand_total), 'Session closed. Total: ' || grand_total || ' EGP');
-
-  PERFORM check_and_award_achievements(sess.customer_id);
-  PERFORM update_customer_rank(sess.customer_id);
 
   RETURN jsonb_build_object('session', sess, 'session_cost', session_cost, 'orders_total', orders_total, 'discount', p_discount_amount, 'grand_total', grand_total, 'payment_method', p_payment_method);
 END;
 $$;
 
+ALTER FUNCTION stop_session_with_bill(UUID, NUMERIC, TEXT, TEXT) SET search_path = public, pg_temp;
+REVOKE ALL ON FUNCTION stop_session_with_bill(UUID, NUMERIC, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION stop_session_with_bill(UUID, NUMERIC, TEXT, TEXT) TO authenticated;
+
 -- ============================================================
 -- PHASE 3: LOYALTY RANKS & ACHIEVEMENTS
 -- ============================================================
-
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS rank TEXT DEFAULT 'bronze' CHECK (rank IN ('bronze', 'silver', 'gold', 'champion'));
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_hours NUMERIC(10,2) DEFAULT 0;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS total_spent NUMERIC(10,2) DEFAULT 0;
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS visit_count INTEGER DEFAULT 0;
 
 CREATE TABLE achievements (
   id SERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, icon TEXT DEFAULT '🏆',
@@ -222,7 +281,8 @@ CREATE TABLE customer_achievements (
 
 ALTER TABLE customer_achievements ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "branch_customer_achievements" ON customer_achievements FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM customers WHERE id = customer_achievements.customer_id AND branch_id = get_my_branch_id()));
+  USING (EXISTS (SELECT 1 FROM customers WHERE id = customer_achievements.customer_id AND branch_id = get_my_branch_id()))
+  WITH CHECK (EXISTS (SELECT 1 FROM customers WHERE id = customer_achievements.customer_id AND branch_id = get_my_branch_id()));
 
 CREATE OR REPLACE FUNCTION update_customer_rank(p_customer_id UUID) RETURNS customers LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE cust customers; new_rank TEXT;
@@ -276,6 +336,8 @@ SELECT c.id AS customer_id, c.name, c.phone, COUNT(d.id) FILTER (WHERE d.status 
   COALESCE(SUM(d.amount - d.amount_paid) FILTER (WHERE d.status IN ('pending', 'partial')), 0) AS total_pending,
   COALESCE(SUM(d.amount), 0) AS total_debt_history, COALESCE(SUM(d.amount_paid), 0) AS total_paid
 FROM customers c LEFT JOIN debts d ON d.customer_id = c.id WHERE c.branch_id = get_my_branch_id() GROUP BY c.id, c.name, c.phone;
+
+ALTER VIEW customer_debt_summary SET (security_invoker = true);
 
 CREATE OR REPLACE FUNCTION pay_debt(p_debt_id UUID, p_amount NUMERIC, p_payment_method TEXT DEFAULT 'cash') RETURNS debts LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE d debts; remaining NUMERIC;
@@ -446,8 +508,8 @@ ALTER TABLE tournament_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tournament_matches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "branch_tournaments" ON tournaments FOR ALL TO authenticated USING (branch_id = get_my_branch_id()) WITH CHECK (branch_id = get_my_branch_id());
-CREATE POLICY "branch_tournament_participants" ON tournament_participants FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM tournaments WHERE id = tournament_participants.tournament_id AND branch_id = get_my_branch_id()));
-CREATE POLICY "branch_tournament_matches" ON tournament_matches FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM tournaments WHERE id = tournament_matches.tournament_id AND branch_id = get_my_branch_id()));
+CREATE POLICY "branch_tournament_participants" ON tournament_participants FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM tournaments WHERE id = tournament_participants.tournament_id AND branch_id = get_my_branch_id())) WITH CHECK (EXISTS (SELECT 1 FROM tournaments WHERE id = tournament_participants.tournament_id AND branch_id = get_my_branch_id()));
+CREATE POLICY "branch_tournament_matches" ON tournament_matches FOR ALL TO authenticated USING (EXISTS (SELECT 1 FROM tournaments WHERE id = tournament_matches.tournament_id AND branch_id = get_my_branch_id())) WITH CHECK (EXISTS (SELECT 1 FROM tournaments WHERE id = tournament_matches.tournament_id AND branch_id = get_my_branch_id()));
 
 CREATE OR REPLACE FUNCTION generate_bracket(p_tournament_id UUID) RETURNS INTEGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE participants tournament_participants[]; count INTEGER; rounds INTEGER; i INTEGER; match_num INTEGER := 1;

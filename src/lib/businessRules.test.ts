@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calculateSessionBill, hasDeviceBookingConflict, reconcileShiftCash } from './businessRules'
+import { calculateSessionBill, calculateShiftCloseout, hasDeviceBookingConflict, reconcileShiftCash } from './businessRules'
 
 describe('PS Lounge business rules', () => {
   it('blocks only overlapping bookings for the same device within the same branch', () => {
@@ -15,5 +15,13 @@ describe('PS Lounge business rules', () => {
 
   it('reports an explicit cash variance when a shift does not reconcile', () => {
     expect(reconcileShiftCash({ openingCash: 100, cashSales: 250, cashTaken: 50, cashLeft: 290 })).toEqual({ expectedCash: 300, variance: -10, balanced: false })
+  })
+
+  it('combines session and POS revenue for a closeout recommendation', () => {
+    expect(calculateShiftCloseout({ openingCash: 100, sessionsRevenue: 150.5, salesRevenue: 49.5, closingCash: 300 })).toEqual({ totalRevenue: 200, expectedCash: 300, variance: 0, balanced: true, recommendedCashTaken: 200, recommendedCashLeft: 100 })
+  })
+
+  it('keeps closeout recommendations non-negative when the counted cash is short', () => {
+    expect(calculateShiftCloseout({ openingCash: 100, sessionsRevenue: 120, salesRevenue: 30, closingCash: 210 })).toMatchObject({ expectedCash: 250, variance: -40, balanced: false, recommendedCashTaken: 110, recommendedCashLeft: 100 })
   })
 })

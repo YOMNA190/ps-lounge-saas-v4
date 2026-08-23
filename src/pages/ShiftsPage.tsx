@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Shift } from '@/types'
 import { Clock, Play, Square, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth-context'
+import { calculateShiftCloseout } from '@/lib/businessRules'
+
+type ShiftPreview = { sessionsRevenue: number; salesRevenue: number }
 
 export default function ShiftsPage() {
   const { profile } = useAuth()
@@ -13,10 +16,9 @@ export default function ShiftsPage() {
   const [openingCash, setOpeningCash] = useState('')
   const [pin, setPin] = useState('')
   const [closingCash, setClosingCash] = useState('')
+  const [preview, setPreview] = useState<ShiftPreview | null>(null)
 
-  useEffect(() => { load() }, [])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     const [{ data: active }, { data: past }] = await Promise.all([
       supabase.from('shifts').select(`*,staff:profiles(*)`).is('ended_at', null).maybeSingle(),
@@ -24,8 +26,26 @@ export default function ShiftsPage() {
     ])
     setActiveShift(active)
     setShifts(past || [])
+    if (active && profile?.id) {
+      const [sessions, sales] = await Promise.all([
+        supabase.from('sessions').select('cost').eq('staff_id', profile.id).gte('started_at', active.started_at).not('ended_at', 'is', null),
+        supabase.from('sales').select('total').eq('staff_id', profile.id).gte('created_at', active.started_at),
+      ])
+      setPreview({
+        sessionsRevenue: (sessions.data || []).reduce((sum, row) => sum + Number(row.cost || 0), 0),
+        salesRevenue: (sales.data || []).reduce((sum, row) => sum + Number(row.total || 0), 0),
+      })
+    } else {
+      setPreview(null)
+    }
     setLoading(false)
-  }
+  }, [profile?.id])
+
+  useEffect(() => { void load() }, [load])
+
+  const closeout = activeShift && preview
+    ? calculateShiftCloseout({ openingCash: Number(activeShift.opening_cash) || 0, sessionsRevenue: preview.sessionsRevenue, salesRevenue: preview.salesRevenue, closingCash: Number(closingCash) || 0 })
+    : null
 
   const startShift = async () => {
     const { error } = await supabase.from('shifts').insert({ opening_cash: Number(openingCash) || 0, staff_id: profile?.id })
@@ -35,10 +55,11 @@ export default function ShiftsPage() {
 
   const endShift = async () => {
     if (!activeShift) return
+    if (!closingCash) { toast.error('أدخل الكاش النهائي بعد العد'); return }
     try {
       const { error } = await supabase.rpc('end_shift', {
         p_shift_id: activeShift.id, p_pin: pin, p_closing_cash: Number(closingCash) || 0,
-        p_cash_taken: 0, p_cash_left: Number(closingCash) || 0
+        p_cash_taken: closeout?.recommendedCashTaken || 0, p_cash_left: closeout?.recommendedCashLeft || 0
       })
       if (error) throw error
       toast.success('تم إنهاء الشيفت')
@@ -64,6 +85,7 @@ export default function ShiftsPage() {
         <div className="rounded-2xl p-5 space-y-4" style={{ background: 'var(--ps-card)', border: '1px solid rgba(0,229,160,0.2)' }}>
           <div className="flex items-center gap-2"><Clock size={16} style={{ color: 'var(--ps-green)' }} /><span className="font-semibold" style={{ color: 'var(--ps-green)' }}>شيفت نشط</span></div>
           <p className="text-sm text-ps-muted">بدأ: {new Date(activeShift.started_at).toLocaleString('ar-EG')}</p>
+          {preview && closeout && <div className="grid grid-cols-2 gap-3 rounded-xl p-3 text-sm" style={{ background: 'var(--ps-surface)', border: '1px solid var(--ps-border)' }}><div><p className="text-ps-muted">المتوقع</p><p className="font-mono font-bold">{closeout.expectedCash.toLocaleString()} ج</p></div><div><p className="text-ps-muted">الفرق الحالي</p><p className="font-mono font-bold" style={{ color: closeout.balanced ? 'var(--ps-green)' : closeout.variance < 0 ? 'var(--ps-red)' : 'var(--ps-gold)' }}>{closeout.variance.toLocaleString()} ج</p></div><p className="col-span-2 text-xs text-ps-muted">جلسات {preview.sessionsRevenue.toLocaleString()} ج + مبيعات {preview.salesRevenue.toLocaleString()} ج. يتم تمرير توزيع الكاش المقترح إلى إغلاق الوردية.</p></div>}
           <div className="flex gap-3">
             <input className="input flex-1" placeholder="PIN" type="password" value={pin} onChange={e => setPin(e.target.value)} dir="ltr" />
             <input className="input flex-1" placeholder="الكاش النهائي" type="number" value={closingCash} onChange={e => setClosingCash(e.target.value)} />

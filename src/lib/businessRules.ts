@@ -29,3 +29,17 @@ export function reconcileShiftCash(input: { openingCash: number; cashSales: numb
   const expectedCash = Math.max(0, input.openingCash) + Math.max(0, input.cashSales) - Math.max(0, input.cashTaken);
   return { expectedCash, variance: Math.round((input.cashLeft - expectedCash) * 100) / 100, balanced: Math.abs(input.cashLeft - expectedCash) < 0.01 };
 }
+
+export function calculateShiftCloseout(input: { openingCash: number; sessionsRevenue: number; salesRevenue: number; closingCash: number }) {
+  const safe = (value: number) => Math.round(Math.max(0, value) * 100) / 100;
+  const openingCash = safe(input.openingCash);
+  const sessionsRevenue = safe(input.sessionsRevenue);
+  const salesRevenue = safe(input.salesRevenue);
+  const closingCash = safe(input.closingCash);
+  const totalRevenue = safe(sessionsRevenue + salesRevenue);
+  const expectedCash = safe(openingCash + totalRevenue);
+  const variance = Math.round((closingCash - expectedCash) * 100) / 100;
+  const recommendedCashTaken = safe(Math.min(Math.max(closingCash - openingCash, 0), totalRevenue));
+  const recommendedCashLeft = safe(Math.max(closingCash - recommendedCashTaken, 0));
+  return { totalRevenue, expectedCash, variance, balanced: Math.abs(variance) < 0.01, recommendedCashTaken, recommendedCashLeft };
+}
